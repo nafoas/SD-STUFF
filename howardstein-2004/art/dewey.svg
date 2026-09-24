@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="210" height="250" viewBox="0 0 210 250">
+  <rect width="210" height="250" fill="#1e7a46"/>
+  <g fill="#2fa862" opacity="0.7">
+    <g transform="translate(24,34)"><circle cx="0" cy="-6" r="6"/><circle cx="-6" cy="1" r="6"/><circle cx="6" cy="1" r="6"/><rect x="-1" y="3" width="2" height="10"/></g>
+    <g transform="translate(186,44)"><circle cx="0" cy="-6" r="6"/><circle cx="-6" cy="1" r="6"/><circle cx="6" cy="1" r="6"/><rect x="-1" y="3" width="2" height="10"/></g>
+    <g transform="translate(22,160)"><circle cx="0" cy="-6" r="6"/><circle cx="-6" cy="1" r="6"/><circle cx="6" cy="1" r="6"/><rect x="-1" y="3" width="2" height="10"/></g>
+    <g transform="translate(190,150)"><circle cx="0" cy="-6" r="6"/><circle cx="-6" cy="1" r="6"/><circle cx="6" cy="1" r="6"/><rect x="-1" y="3" width="2" height="10"/></g>
+  </g>
+  <!-- suit -->
+  <path d="M8,250 C12,222 32,206 62,200 L148,200 C178,206 198,222 202,250Z" fill="#3b3b40"/>
+  <rect x="85" y="166" width="40" height="40" fill="#e9c0a0"/>
+  <path d="M80,200 L105,246 L130,200Z" fill="#f4f4f4"/>
+  <path d="M99,208 L111,208 L114,236 L105,247 L96,236Z" fill="#1e7a46"/>
+  <path d="M62,200 L80,200 L105,246 L84,250Z M148,200 L130,200 L105,246 L126,250Z" fill="#2f2f34"/>
+  <!-- King of Clubs in the breast pocket -->
+  <g transform="rotate(-8 150 214)">
+    <rect x="138" y="196" width="22" height="30" rx="2" fill="#fff" stroke="#333"/>
+    <text x="142" y="207" font-size="9" font-weight="bold" fill="#111" font-family="Georgia,serif">K</text>
+    <g transform="translate(152,214)" fill="#111"><circle cx="0" cy="-3" r="2.6"/><circle cx="-3" cy="1" r="2.6"/><circle cx="3" cy="1" r="2.6"/><rect x="-0.8" y="1" width="1.6" height="5"/></g>
+  </g>
+  <rect x="134" y="220" width="36" height="10" fill="#2f2f34"/>
+  <!-- button -->
+  <circle cx="68" cy="226" r="15" fill="#fff" stroke="#1e7a46" stroke-width="2"/>
+  <text x="68" y="222" font-size="5.5" font-weight="bold" fill="#1e7a46" text-anchor="middle" font-family="Arial,Helvetica,sans-serif">KISS ME</text>
+  <text x="68" y="229" font-size="5.5" font-weight="bold" fill="#1e7a46" text-anchor="middle" font-family="Arial,Helvetica,sans-serif">I'M IRISH</text>
+  <text x="68" y="236" font-size="4" fill="#c00" text-anchor="middle" font-family="Arial,Helvetica,sans-serif">(really)</text>
+  <!-- head, red hair -->
+  <ellipse cx="57" cy="120" rx="9" ry="13" fill="#dcae8c"/>
+  <ellipse cx="153" cy="120" rx="9" ry="13" fill="#dcae8c"/>
+  <ellipse cx="105" cy="116" rx="48" ry="58" fill="#ecc4a3"/>
+  <path d="M55,112 C46,64 76,40 106,42 C138,44 164,66 155,112 C152,90 146,80 134,72 C122,80 90,80 76,72 C64,80 58,92 55,112Z" fill="#c1440e"/>
+  <path d="M62,142 C66,170 86,178 105,178 C124,178 144,170 148,142 C142,160 126,168 105,168 C84,168 68,160 62,142Z" fill="#c1440e" opacity="0.55"/>
+  <!-- the same $1.99 disguise -->
+  <path d="M65,94 Q84,78 101,91 L101,99 Q84,89 65,101Z M109,91 Q126,78 145,94 L145,101 Q126,89 109,99Z" fill="#0d0d0d"/>
+  <ellipse cx="84" cy="112" rx="8" ry="5.5" fill="#fff"/><circle cx="89" cy="112" r="3.3" fill="#1b1b1b"/>
+  <ellipse cx="126" cy="112" rx="8" ry="5.5" fill="#fff"/><circle cx="131" cy="112" r="3.3" fill="#1b1b1b"/>
+  <circle cx="84" cy="111" r="16" fill="#d6ecff" fill-opacity="0.3" stroke="#111" stroke-width="5"/>
+  <circle cx="126" cy="111" r="16" fill="#d6ecff" fill-opacity="0.3" stroke="#111" stroke-width="5"/>
+  <path d="M100,109 Q105,103 110,109" stroke="#111" stroke-width="4" fill="none"/>
+  <path d="M68,108 L56,112 M142,108 L154,112" stroke="#111" stroke-width="3.5"/>
+  <path d="M105,103 C95,112 90,129 93,139 C96,148 114,148 117,139 C120,129 115,112 105,103Z" fill="#eea88e" stroke="#b8735c" stroke-width="1.5"/>
+  <ellipse cx="99" cy="141" rx="3" ry="2" fill="#a35a45"/><ellipse cx="111" cy="141" rx="3" ry="2" fill="#a35a45"/>
+  <path d="M66,152 C74,139 94,138 105,147 C116,138 136,139 144,152 C137,163 119,163 105,156 C91,163 73,163 66,152Z" fill="#0f0f0f"/>
+  <path d="M93,166 Q105,160 117,166" stroke="#6b2e22" stroke-width="3" fill="none" stroke-linecap="round"/>
+</svg>

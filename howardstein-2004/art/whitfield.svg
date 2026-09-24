@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="210" height="250" viewBox="0 0 210 250">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8fd0f2"/><stop offset="0.7" stop-color="#d7f0fb"/>
+      <stop offset="0.7" stop-color="#3a7bbf"/><stop offset="1" stop-color="#2b5f99"/>
+    </linearGradient>
+    <pattern id="plaid" width="16" height="16" patternUnits="userSpaceOnUse">
+      <rect width="16" height="16" fill="#b3202a"/>
+      <rect width="16" height="4" y="6" fill="#7d141c"/><rect width="4" height="16" x="6" fill="#7d141c"/>
+      <rect width="16" height="1" y="13" fill="#1b1b1b" opacity="0.6"/><rect width="1" height="16" x="13" fill="#1b1b1b" opacity="0.6"/>
+    </pattern>
+  </defs>
+  <rect width="210" height="250" fill="url(#bg)"/>
+  <!-- flannel -->
+  <path d="M8,250 C12,222 32,206 62,200 L148,200 C178,206 198,222 202,250Z" fill="url(#plaid)"/>
+  <rect x="85" y="166" width="40" height="40" fill="#efc09c"/>
+  <path d="M80,200 L105,228 L130,200 L124,200 L105,220 L86,200Z" fill="#7d141c"/>
+  <!-- medal -->
+  <path d="M142,200 L150,222 L158,200Z" fill="#2c4180"/>
+  <circle cx="150" cy="230" r="11" fill="#e8c14a" stroke="#a8861c" stroke-width="2"/>
+  <text x="150" y="233" font-size="7" font-weight="bold" fill="#6b4f0e" text-anchor="middle" font-family="Arial,Helvetica,sans-serif">#1</text>
+  <text x="150" y="247" font-size="5.5" font-weight="bold" fill="#fff" text-anchor="middle" font-family="Arial,Helvetica,sans-serif">MUSTACHE CHAMP</text>
+  <!-- head -->
+  <ellipse cx="57" cy="122" rx="9" ry="13" fill="#e2ab86"/>
+  <ellipse cx="153" cy="122" rx="9" ry="13" fill="#e2ab86"/>
+  <ellipse cx="105" cy="120" rx="48" ry="56" fill="#f1c5a3"/>
+  <!-- cheesehead -->
+  <path d="M40,86 L105,20 L172,86 C150,94 60,94 40,86Z" fill="#f7c531" stroke="#d99f12" stroke-width="2"/>
+  <g fill="#e0a915"><circle cx="90" cy="60" r="6"/><circle cx="118" cy="48" r="4"/><circle cx="132" cy="72" r="7"/><circle cx="70" cy="80" r="4"/><circle cx="106" cy="78" r="3.5"/></g>
+  <path d="M86,106 Q92,101 99,106 M111,106 Q118,101 124,106" stroke="#6b4a2b" stroke-width="3" fill="none"/>
+  <circle cx="92" cy="114" r="3.5" fill="#2b2b2b"/><circle cx="118" cy="114" r="3.5" fill="#2b2b2b"/>
+  <path d="M105,116 C101,128 100,134 105,136 C108,137 111,135 111,133" stroke="#c98b6a" stroke-width="2.5" fill="none"/>
+  <!-- the championship handlebar -->
+  <path d="M105,142 C92,136 70,138 58,146 C46,154 36,150 34,140 C30,150 38,164 54,162 C70,160 86,154 105,152 C124,154 140,160 156,162 C172,164 180,150 176,140 C174,150 164,154 152,146 C140,138 118,136 105,142Z" fill="#6b3f1d"/>
+  <path d="M34,140 C28,132 34,124 40,128" stroke="#6b3f1d" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M176,140 C182,132 176,124 170,128" stroke="#6b3f1d" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M92,164 Q105,172 118,164" stroke="#8b3a2e" stroke-width="3" fill="none" stroke-linecap="round"/>
+</svg>

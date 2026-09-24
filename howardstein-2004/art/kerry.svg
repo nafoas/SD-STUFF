@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="210" height="250" viewBox="0 0 210 250">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6fa8dc"/>
+      <stop offset="0.62" stop-color="#9fc5e8"/>
+      <stop offset="0.62" stop-color="#2b6cb0"/>
+      <stop offset="1" stop-color="#1c4a80"/>
+    </linearGradient>
+  </defs>
+  <rect width="210" height="250" fill="url(#bg)"/>
+  <!-- windsurf sail, as seen in a certain attack ad -->
+  <path d="M12,24 L14,168 L70,160 C58,120 40,64 12,24Z" fill="#fff" stroke="#555" stroke-width="1.5"/>
+  <path d="M14,70 L46,82 M14,110 L60,120 M14,145 L66,150" stroke="#e8743b" stroke-width="5"/>
+  <path d="M14,20 L14,172" stroke="#555" stroke-width="3"/>
+  <!-- suit -->
+  <path d="M10,250 C14,224 34,208 64,202 L150,202 C180,208 198,224 202,250Z" fill="#23283a"/>
+  <rect x="88" y="170" width="40" height="38" fill="#e6b995"/>
+  <path d="M84,202 L108,246 L132,202Z" fill="#f4f4f4"/>
+  <path d="M102,210 L114,210 L117,236 L108,247 L99,236Z" fill="#8c1c2c"/>
+  <path d="M64,202 L84,202 L108,246 L86,250Z M150,202 L132,202 L108,246 L130,250Z" fill="#1a1e2c"/>
+  <!-- long face -->
+  <ellipse cx="66" cy="120" rx="8" ry="14" fill="#dcaa86"/>
+  <ellipse cx="152" cy="120" rx="8" ry="14" fill="#dcaa86"/>
+  <path d="M68,100 C68,60 88,46 109,46 C132,46 150,60 150,100 L150,140 C150,172 132,192 109,192 C86,192 68,172 68,140Z" fill="#efc6a4"/>
+  <!-- magnificent hair -->
+  <path d="M62,108 C54,60 80,26 112,28 C146,30 164,58 156,108 C152,86 146,72 134,64 C120,74 96,74 80,64 C72,72 66,86 62,108Z" fill="#b9bcc6"/>
+  <path d="M80,64 C92,40 128,36 146,56" stroke="#d9dbe2" stroke-width="3" fill="none"/>
+  <path d="M86,90 Q95,85 102,90 M116,90 Q124,85 132,90" stroke="#7a6a60" stroke-width="3" fill="none"/>
+  <path d="M86,102 Q94,98 101,102 M117,102 Q124,98 132,102" stroke="#8a5a45" stroke-width="2" fill="none"/>
+  <circle cx="94" cy="104" r="3" fill="#2b2b2b"/><circle cx="124" cy="104" r="3" fill="#2b2b2b"/>
+  <path d="M109,104 C106,122 103,134 108,138 C111,140 115,138 115,136" stroke="#c6906f" stroke-width="2.5" fill="none"/>
+  <path d="M92,154 Q109,162 126,154" stroke="#8b3a2e" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M84,132 C86,150 92,170 109,182 M134,132 C132,150 126,170 109,182" stroke="#dcab88" stroke-width="1.5" fill="none"/>
+  <path d="M98,182 Q109,188 120,182" stroke="#d09a78" stroke-width="2" fill="none"/>
+</svg>

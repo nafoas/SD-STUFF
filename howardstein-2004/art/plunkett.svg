@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="210" height="250" viewBox="0 0 210 250">
+  <rect width="210" height="250" fill="#bfe3f5"/>
+  <rect y="150" width="210" height="100" fill="#8a8f96"/>
+  <!-- car lot sign + bunting -->
+  <rect x="10" y="10" width="190" height="30" rx="4" fill="#c8102e" stroke="#fff" stroke-width="2"/>
+  <text x="105" y="31" font-size="15" font-weight="bold" fill="#fff" text-anchor="middle" font-family="Arial Black,Arial,Helvetica,sans-serif">PLUNKETT MOTORS</text>
+  <path d="M0,50 Q105,70 210,50" stroke="#666" stroke-width="1" fill="none"/>
+  <g>
+    <path d="M10,52 L20,53 L15,64Z" fill="#c8102e"/><path d="M32,56 L42,57 L37,68Z" fill="#fff"/>
+    <path d="M54,58 L64,59 L59,70Z" fill="#2c4180"/><path d="M146,59 L156,58 L151,70Z" fill="#c8102e"/>
+    <path d="M168,57 L178,56 L173,68Z" fill="#fff"/><path d="M190,53 L200,52 L195,64Z" fill="#2c4180"/>
+  </g>
+  <!-- mustard sport coat -->
+  <path d="M8,250 C12,222 32,206 62,200 L148,200 C178,206 198,222 202,250Z" fill="#c9a227"/>
+  <path d="M40,212 L44,250 M170,212 L166,250" stroke="#a8861c" stroke-width="2"/>
+  <rect x="85" y="170" width="40" height="36" fill="#f0c4a2"/>
+  <path d="M80,200 L105,246 L130,200Z" fill="#f4f4f4"/>
+  <path d="M98,208 L112,208 L116,236 L105,248 L94,236Z" fill="#2eaa4a"/>
+  <g fill="#ffe14d"><circle cx="103" cy="214" r="2"/><circle cx="108" cy="222" r="2"/><circle cx="101" cy="229" r="2"/><circle cx="109" cy="236" r="2"/></g>
+  <path d="M62,200 L80,200 L105,246 L84,250Z M148,200 L130,200 L105,246 L126,250Z" fill="#b38f1f"/>
+  <!-- thumbs up -->
+  <g transform="translate(160,168)">
+    <rect x="0" y="12" width="26" height="24" rx="6" fill="#f0c4a2" stroke="#c9936f"/>
+    <rect x="4" y="-8" width="10" height="24" rx="5" fill="#f0c4a2" stroke="#c9936f"/>
+    <path d="M2,20 L24,20 M2,27 L24,27" stroke="#c9936f"/>
+  </g>
+  <!-- round face, heroic combover -->
+  <ellipse cx="58" cy="122" rx="9" ry="13" fill="#e8b590"/>
+  <ellipse cx="152" cy="122" rx="9" ry="13" fill="#e8b590"/>
+  <ellipse cx="105" cy="120" rx="48" ry="54" fill="#f3c9a8"/>
+  <path d="M60,108 C60,92 64,82 72,78 L74,100 C68,102 64,104 60,108Z M150,108 C150,92 146,82 138,78 L136,100 C142,102 146,104 150,108Z" fill="#7b5a3a"/>
+  <path d="M64,90 C82,64 120,62 146,78 M66,84 C86,62 122,60 144,72 M70,80 C92,60 124,60 140,68" stroke="#7b5a3a" stroke-width="2.2" fill="none"/>
+  <path d="M84,104 Q91,98 98,104 M112,104 Q119,98 126,104" stroke="#6b4a2b" stroke-width="3" fill="none"/>
+  <circle cx="91" cy="114" r="3.5" fill="#2b2b2b"/><circle cx="119" cy="114" r="3.5" fill="#2b2b2b"/>
+  <path d="M105,116 C101,128 100,134 105,136 C108,137 111,135 111,133" stroke="#c98b6a" stroke-width="2.5" fill="none"/>
+  <path d="M80,146 Q105,176 130,146 Z" fill="#fff" stroke="#8b3a2e" stroke-width="2.5"/>
+  <path d="M84,149 L126,149" stroke="#ddd" stroke-width="1"/>
+  <circle cx="76" cy="136" r="7" fill="#f2a58e" opacity="0.5"/><circle cx="134" cy="136" r="7" fill="#f2a58e" opacity="0.5"/>
+</svg>

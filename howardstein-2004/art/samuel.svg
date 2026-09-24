@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="210" height="250" viewBox="0 0 210 250">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2c4180"/>
+      <stop offset="1" stop-color="#141f45"/>
+    </linearGradient>
+    <path id="st" d="M0,-5 L1.2,-1.6 4.8,-1.5 1.9,0.6 2.9,4 0,2 -2.9,4 -1.9,0.6 -4.8,-1.5 -1.2,-1.6Z" fill="#fff"/>
+  </defs>
+  <rect width="210" height="250" fill="url(#bg)"/>
+  <g opacity="0.35" fill="#c8102e">
+    <rect y="150" width="210" height="12"/><rect y="174" width="210" height="12"/>
+    <rect y="198" width="210" height="12"/><rect y="222" width="210" height="12"/>
+  </g>
+  <g opacity="0.75">
+    <use href="#st" x="16" y="18"/><use href="#st" x="36" y="30"/><use href="#st" x="18" y="46"/>
+    <use href="#st" x="190" y="20"/><use href="#st" x="172" y="36"/><use href="#st" x="192" y="52"/>
+  </g>
+  <!-- suit -->
+  <path d="M8,250 C12,222 30,206 62,200 L148,200 C180,206 198,222 202,250Z" fill="#2e2f36"/>
+  <rect x="84" y="164" width="42" height="42" fill="#b58258"/>
+  <path d="M80,200 L105,246 L130,200Z" fill="#f4f4f4"/>
+  <path d="M99,208 L111,208 L114,236 L105,247 L96,236Z" fill="#c8102e"/>
+  <path d="M62,200 L80,200 L105,246 L84,250 Z" fill="#24252b"/>
+  <path d="M148,200 L130,200 L105,246 L126,250 Z" fill="#24252b"/>
+  <!-- flag pin -->
+  <g transform="translate(66,216)">
+    <rect width="12" height="8" fill="#fff"/><rect y="0" width="12" height="1.6" fill="#c8102e"/>
+    <rect y="3.2" width="12" height="1.6" fill="#c8102e"/><rect y="6.4" width="12" height="1.6" fill="#c8102e"/>
+    <rect width="5" height="4.4" fill="#2c4180"/>
+  </g>
+  <!-- name tag -->
+  <g transform="rotate(-5 160 224)">
+    <rect x="127" y="205" width="68" height="38" rx="3" fill="#fff" stroke="#c8102e"/>
+    <rect x="127" y="205" width="68" height="11" rx="3" fill="#c8102e"/>
+    <text x="161" y="213.5" font-size="7.5" font-weight="bold" fill="#fff" text-anchor="middle" font-family="Arial,Helvetica,sans-serif">HELLO</text>
+    <text x="161" y="221.5" font-size="5" fill="#444" text-anchor="middle" font-family="Arial,Helvetica,sans-serif">my name is</text>
+    <text x="161" y="231" font-size="8" fill="#1a2a6c" text-anchor="middle" font-family="'Comic Sans MS','Marker Felt',cursive">Samuel</text>
+    <text x="161" y="240" font-size="8" fill="#1a2a6c" text-anchor="middle" font-family="'Comic Sans MS','Marker Felt',cursive">Howardstein</text>
+  </g>
+  <!-- ears + head -->
+  <ellipse cx="56" cy="120" rx="9" ry="14" fill="#b88659"/>
+  <ellipse cx="154" cy="120" rx="9" ry="14" fill="#b88659"/>
+  <ellipse cx="105" cy="113" rx="50" ry="60" fill="#c9956a"/>
+  <path d="M60,140 C66,165 84,176 105,177 C126,176 144,165 150,140 C146,160 128,172 105,172 C82,172 64,160 60,140Z" fill="#b5835a"/>
+  <!-- slicked hair -->
+  <path d="M55,110 C50,70 74,47 105,46 C136,47 160,70 155,110 C151,92 147,82 139,76 C126,67 84,67 71,76 C63,82 59,92 55,110Z" fill="#1c1a19"/>
+  <path d="M72,60 C88,52 122,52 138,60" stroke="#57524e" stroke-width="2" fill="none"/>
+  <path d="M66,70 C86,60 124,60 144,70" stroke="#3d3936" stroke-width="2" fill="none"/>
+  <!-- groucho eyebrows -->
+  <path d="M64,93 Q83,76 101,90 L101,99 Q83,88 64,101Z" fill="#0d0d0d"/>
+  <path d="M109,90 Q127,76 146,93 L146,101 Q127,88 109,99Z" fill="#0d0d0d"/>
+  <!-- shifty eyes -->
+  <ellipse cx="84" cy="112" rx="8" ry="5.5" fill="#fff"/><circle cx="79" cy="112" r="3.3" fill="#1b1b1b"/>
+  <ellipse cx="126" cy="112" rx="8" ry="5.5" fill="#fff"/><circle cx="121" cy="112" r="3.3" fill="#1b1b1b"/>
+  <!-- glasses -->
+  <circle cx="84" cy="111" r="16" fill="#d6ecff" fill-opacity="0.3" stroke="#111" stroke-width="5"/>
+  <circle cx="126" cy="111" r="16" fill="#d6ecff" fill-opacity="0.3" stroke="#111" stroke-width="5"/>
+  <path d="M100,109 Q105,103 110,109" stroke="#111" stroke-width="4" fill="none"/>
+  <path d="M68,108 L55,112 M142,108 L155,112" stroke="#111" stroke-width="3.5"/>
+  <!-- price tag on the temple arm -->
+  <path d="M153,112 C158,120 161,126 163,131" stroke="#ddd" stroke-width="1" fill="none"/>
+  <g transform="rotate(-14 170 139)">
+    <rect x="157" y="131" width="27" height="14" rx="2" fill="#fffbe6" stroke="#999"/>
+    <circle cx="160.5" cy="138" r="1.3" fill="#999"/>
+    <text x="172" y="141.5" font-size="8" font-weight="bold" fill="#c00" text-anchor="middle" font-family="Arial,Helvetica,sans-serif">$1.99</text>
+  </g>
+  <!-- big plastic nose -->
+  <path d="M105,103 C95,112 90,129 93,139 C96,148 114,148 117,139 C120,129 115,112 105,103Z" fill="#eea88e" stroke="#b8735c" stroke-width="1.5"/>
+  <ellipse cx="99" cy="141" rx="3" ry="2" fill="#a35a45"/><ellipse cx="111" cy="141" rx="3" ry="2" fill="#a35a45"/>
+  <ellipse cx="100" cy="118" rx="3" ry="8" fill="#fff" opacity="0.35"/>
+  <!-- the mustache -->
+  <path d="M66,152 C74,139 94,138 105,147 C116,138 136,139 144,152 C137,163 119,163 105,156 C91,163 73,163 66,152Z" fill="#0f0f0f"/>
+  <path d="M76,150 L80,156 M86,147 L89,155 M96,147 L98,154 M114,147 L112,154 M124,147 L121,155 M134,150 L130,156" stroke="#333" stroke-width="1.2"/>
+  <!-- smile -->
+  <path d="M91,165 Q105,175 119,165" stroke="#6b2e22" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <!-- cigar -->
+  <g transform="rotate(14 120 166)">
+    <rect x="117" y="162" width="32" height="7" rx="3" fill="#7a4a25"/>
+    <rect x="127" y="162" width="6" height="7" fill="#c9a227"/>
+    <rect x="146" y="162" width="5" height="7" rx="1" fill="#e25822"/>
+  </g>
+  <path d="M154,170 C160,160 150,152 158,142 C164,134 156,128 162,120" stroke="#ccc" stroke-width="2" fill="none" opacity="0.6"/>
+</svg>
