@@ -27,6 +27,8 @@ public class ModConfig {
     public String claudeBaseUrl = "";
     /** low | medium | high. Lower is faster and cheaper; higher plans more carefully. */
     public String claudeEffort = "low";
+    /** Let companions work on their own goals between check-ins (each step is a Claude call). */
+    public boolean autonomy = true;
     /** Max tool calls Claude may make for a single decision. */
     public int maxActionsPerDecision = 16;
 

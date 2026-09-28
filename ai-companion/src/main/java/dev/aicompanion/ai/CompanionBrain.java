@@ -65,6 +65,9 @@ public class CompanionBrain {
     private volatile long lastCheckIn = System.currentTimeMillis();
     private volatile long lastSpoke;
     private volatile long nextChatter;
+    @Nullable private volatile String lastGoalId;
+    private volatile long nextPursuit;
+    private volatile long freeTimeUntil;
 
     public CompanionBrain(String characterId, String name) {
         this.characterId = characterId;
@@ -209,6 +212,99 @@ public class CompanionBrain {
         }
     }
 
+    // ------------------------------------------------------------------ goals (called from the server tick)
+
+    /**
+     * When the body has nothing to do, pick what's next: a goal step (done by the action layer on the character's
+     * behalf, no need to ask the character) or free time. Promises and blockers come first; the day plan decides
+     * how goals and free time trade off.
+     */
+    public void maybePursue(long now) {
+        CompanionEntity e = entity();
+        if (e == null || !ModConfig.get().autonomy || isThinkingOrActing() || e.isInCombat() || e.currentTaskDescription() != null) return;
+        if (now < nextPursuit) return;
+        checkGoals(); // don't start another step on something that's already achieved
+        Goals.Choice choice = Goals.choose(memory, profile, lastGoalId);
+        // Free time is real time off, but a promise or something blocking one cuts it short.
+        boolean pressing = choice.goal() != null && (!choice.goal().from.equals("self") || choice.goal().blocker && choice.score() >= 15);
+        if (now < freeTimeUntil && !pressing) return;
+        if (choice.isFreeTime()) {
+            long minutes = memory.dayPlan.kind.equals("free") ? 10 : 3 + (long) (Math.random() * 3);
+            freeTimeUntil = now + minutes * 60_000;
+            log("free", "Taking some time off (" + choice.why() + ")", false);
+            return;
+        }
+        startPursuit(choice.goal(), choice.why());
+    }
+
+    private void startPursuit(Goals.Goal goal, String why) {
+        CompanionEntity e = entity();
+        if (e == null || e.getServer() == null) return;
+        int generation = planGeneration.incrementAndGet();
+        lastGoalId = goal.id;
+        nextPursuit = Long.MAX_VALUE; // until this step is done
+        planRunning.set(true);
+        body.submit(() -> {
+            try {
+                if (planGeneration.get() != generation) return;
+                String situation = e.getServer().submit(() -> Perception.describe(e, memory)).get(10, TimeUnit.SECONDS);
+                debug("working on [" + goal.id + "] " + goal.title + " (" + why + ")");
+                ClaudeActionLayer.Outcome outcome = ClaudeActionLayer.pursue(this, goal, why, situation, () -> planGeneration.get() != generation);
+                goal.lastWorked = System.currentTimeMillis();
+                boolean stuck = outcome.actions() == 0 || outcome.summary().toLowerCase().matches(".*(fail|couldn't|could not|can't|missing|not enough).*");
+                if (stuck) goal.attempts++;
+                else goal.attempts = 0;
+                log("work", "[" + goal.title + "] " + outcome.summary(), false);
+                debug("step result: " + outcome.summary() + " (" + outcome.actions() + " actions)");
+                // Pause a moment between steps; longer if nothing got done, so it doesn't spin.
+                nextPursuit = System.currentTimeMillis() + (stuck ? 45_000 : 4_000);
+            } catch (Exception ex) {
+                nextPursuit = System.currentTimeMillis() + 60_000;
+                AiCompanionMod.LOGGER.error("{} failed working on a goal", name, ex);
+            } finally {
+                planRunning.set(false);
+                lastActivity = System.currentTimeMillis();
+                dirty = true;
+            }
+        });
+    }
+
+    /** Goals count as achieved however it happened: crafted, found, or handed over by a player. Server thread. */
+    public void checkGoals() {
+        CompanionEntity e = entity();
+        if (e == null) return;
+        for (Goals.Goal g : Goals.checkConditions(memory, e)) {
+            boolean gift = g.condition != null && memory.journalSince(System.currentTimeMillis() - 60_000).stream()
+                    .anyMatch(j -> j.kind.equals("gift") && g.condition.items.stream().anyMatch(j.text::contains));
+            log("goal", "Achieved goal: " + g.title + (gift ? " (thanks to a gift)" : ""), !g.horizon.equals("short") || !g.from.equals("self"));
+            for (CompanionMemory.Promise p : memory.promises) {
+                if (g.id.equals(p.goalId) && p.status.equals("open")) p.status = "done";
+            }
+            if (g.parent != null) lastGoalId = g.parent; // back to what it was doing
+            if (!planRunning.get()) nextPursuit = Math.min(nextPursuit, System.currentTimeMillis() + 3_000);
+            dirty = true;
+        }
+    }
+
+    /** A tool broke: getting a new one becomes a short-term goal that pauses whatever it was for. */
+    public void onToolBroke(net.minecraft.item.Item tool) {
+        String name = dev.aicompanion.game.Ids.name(tool);
+        Goals.Goal current = lastGoalId == null ? null : Goals.find(memory, lastGoalId);
+        if (current != null && !current.status.equals("active")) current = null;
+        Goals.Condition cond = new Goals.Condition();
+        cond.type = "have_item";
+        cond.items = new java.util.ArrayList<>(Goals.sameKindOfTool(tool));
+        cond.count = 1;
+        for (Goals.Goal g : Goals.active(memory)) {
+            if (g.condition != null && g.condition.items.contains(name)) return; // already on it
+        }
+        Goals.Goal g = Goals.add(memory, "get a new " + name.replace('_', ' ').replaceAll("^(wooden|stone|iron|golden|diamond|netherite) ", ""),
+                "short", 9, current == null ? null : current.id, "self", cond);
+        g.blocker = g.parent != null;
+        log("need", "Your " + name + " broke" + (current == null ? "" : " while working on '" + current.title + "'"), false);
+        dirty = true;
+    }
+
     /** At sunrise (or when it first shows up that day) the character decides what kind of day it'll be. */
     public void maybeMorning(long day) {
         CompanionEntity e = entity();
@@ -292,6 +388,7 @@ public class CompanionBrain {
                 .append("you can walk around, mine, craft, build, fight, trade items and talk. This message comes from the game and describes what you perceive.\n\n")
                 .append(situation);
         if (!memory.plans.isBlank()) prompt.append("Your plans (in your own words): ").append(memory.plans).append("\n");
+        prompt.append("Your goals:\n").append(Goals.describe(memory));
         if (memory.dayPlan.day >= 0 && !s.kind().equals("morning")) prompt.append("Today you decided it's ").append(memory.dayPlan.describe()).append("\n");
         List<CompanionMemory.Promise> promises = memory.openPromises();
         if (!promises.isEmpty()) {
@@ -310,13 +407,15 @@ public class CompanionBrain {
                         .append("a free day (wandering, visiting people, looking around, relaxing) or a mixed day. Decide the way you really would: ")
                         .append("your mood, how hard you've been working, what's going on.\n");
                 format = "Say something in chat if you feel like it (or nothing). Then write \"DAY:\" followed by work, goals, free or mixed, "
-                        + "and optionally a few words on what you have in mind. Then \"INTENT:\" with what you do first.";
+                        + "and optionally a few words on what you have in mind. Then \"INTENT:\" with what you do first. "
+                        + "If your goals changed, add \"PLANS:\" in your own words.";
             }
             case "checkin" -> {
                 prompt.append("\nTime to take stock. Since you last thought about things:\n").append(s.event().isBlank() ? "Not much happened.\n" : s.event());
                 format = "React in character if you want to (1 to 2 short sentences for the chat, or nothing). Then write \"INTENT:\" with what you'll do next "
-                        + "(it can be continuing, something new, resting, or none). You may also add a line \"PLANS:\" with your plans and priorities in a sentence or two, "
-                        + "if they changed.";
+                        + "(it can be continuing, something new, resting, or none). If your goals or priorities changed (something new you want, "
+                        + "something you're done with or don't care about any more), add a line \"PLANS:\" saying so in your own words. "
+                        + "Big dreams are fine, not just practical things.";
             }
             case "overheard" -> {
                 prompt.append("\nPeople are talking in chat, not necessarily to you. ").append(s.event()).append("\n");
@@ -374,6 +473,11 @@ public class CompanionBrain {
         if (parsed.plans() != null && !parsed.plans().isBlank()) {
             memory.plans = parsed.plans();
             log("decision", "Plans now: " + parsed.plans(), false);
+            String changes = GoalSecretary.update(this, "PLANS: " + parsed.plans() + (parsed.intent() == null ? "" : "\nINTENT: " + parsed.intent()));
+            if (!changes.isBlank()) {
+                log("goal", "Goals updated: " + changes, false);
+                debug("goals: " + changes);
+            }
         }
         if (!parsed.spoken().isBlank()) say(parsed.spoken(), s.depth());
 
@@ -388,6 +492,10 @@ public class CompanionBrain {
         CompanionMemory.Promise promise = null;
         if (s.kind().equals("chat") && s.speaker() != null && !s.speaker().contains("(") && intent != null) {
             promise = memory.promise(s.speaker(), intent);
+            // A promise is also a goal, so if the first attempt falls short it keeps getting worked on.
+            Goals.Goal g = Goals.add(memory, intent, "short", 8, null, s.speaker(), null);
+            promise.goalId = g.id;
+            lastGoalId = g.id;
         }
         startPlan(s, parsed.spoken(), intent, situation, promise);
     }
@@ -437,6 +545,15 @@ public class CompanionBrain {
                     boolean interrupted = planGeneration.get() != generation;
                     promise.status = interrupted ? "open" : outcome.actions() == 0 ? "dropped" : summary.toLowerCase().matches(".*(fail|couldn't|could not|missing|not enough).*") ? "failed" : "done";
                     promise.result = summary;
+                    Goals.Goal g = Goals.find(memory, promise.goalId);
+                    if (g != null && g.status.equals("active")) {
+                        if (promise.status.equals("done")) Goals.finish(memory, g, "done");
+                        else if (promise.status.equals("dropped")) Goals.finish(memory, g, "dropped");
+                        else {
+                            g.attempts++;
+                            g.progress = summary; // failed or interrupted: stays a goal and gets picked up again
+                        }
+                    }
                 }
                 // A plan that actually did something counts as a big event: the character takes stock afterwards.
                 log("plan_done", summary, outcome.actions() > 0 && s.depth() < 2);

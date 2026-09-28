@@ -37,6 +37,12 @@ The personality affects behavior at three levels:
 
 - **Check-ins.** When a big task ends, or every few minutes, the character gets a summary of what its body did and what happened: tasks, fights, items gained and lost, gifts, news. It reacts, decides what to do next, and can update its plans in its own words. Fights and dodging never wait on this.
 - **Day plans.** At sunrise the character decides what kind of day it is: a work day, a day for its bigger goals, a free day (wandering, visiting, relaxing), or a mixed day. Its check-ins and the way it paces its work follow that all day. Free days are real days off, not two-minute breaks.
+- **Goals.** The character's own words ("mine this mountain", "someday a castle") become a goal tree of long, medium and short goals. When the body is free it works through them without asking the character each time, and every step is logged for the next check-in. It isn't a checklist:
+  - Promises come first.
+  - Goals are then scored by importance, today's day plan, momentum, and how long they've been neglected, so long-term goals still get their turn.
+  - Free time competes with all of it, so it doesn't grind non-stop.
+  - A blocker becomes a sub-goal that pauses its parent. If the pickaxe breaks mid-mountain, "get a new pickaxe" comes first, then it goes back to the mountain.
+  - Goals count as done however they're met, so if someone hands it a pickaxe it won't craft another one.
 - **Private intentions.** Every reply has what it says out loud and what it privately intends, and the two can differ.
 - **Chat awareness.** Companions see all of server chat. Messages that concern them get the character's attention: their name, their interests, places they know, coordinates, questions to "anyone", lively conversations, people joining. They chime in only when it fits their character, and sociable ones more often.
 - **Requests.** Asking something becomes a promise it tracks. If it's busy, the character decides whether to drop what it's doing or say it's busy.
@@ -89,6 +95,7 @@ Companions look at the blocks around them the way a player would. There's nothin
 | `/companion list` | Where each companion is and what it's doing |
 | `/companion stop <name>` | Make it stop its current activity |
 | `/companion profile <name>` | Show its behavior profile |
+| `/companion goals <name>` | Its goal tree, today's day plan, and its plans in its own words |
 | `/companion log <name>` | Its recent activity log |
 | `/companion memory <name>` | Places, chests and resources it remembers |
 | `/companion reinterview <name>` | Rebuild the profile from a fresh self-description |
@@ -104,6 +111,7 @@ Profiles are saved in `config/ai-companion/profiles/<id>.json`, and you can edit
 | `claudeModel` | `claude-opus-5` | Model for the action layer |
 | `claudeEffort` | `low` | `low`, `medium` or `high`. Lower is faster and cheaper. |
 | `maxActionsPerDecision` | 16 | Cap on tool calls per decision |
+| `autonomy` | true | Work on its own goals between check-ins. Each step is a Claude call. |
 | `checkInMinutes` | 5 | The character takes stock when a big task ends, or after this many minutes. 0 means only when a task ends. |
 | `reactToResults` | true | Check in when a big task ends, not just on the timer |
 | `chatterMinutes` | 6 | Rough gap between casual remarks for an average character. Sociable ones talk more, quiet ones less. 0 turns chatter off. |

@@ -150,15 +150,41 @@ public final class ClaudeActionLayer {
     public record Outcome(String summary, int actions) {}
 
     public static Outcome carryOut(CompanionBrain brain, String event, String spoken, String intent, String situation, BooleanSupplier cancelled) {
-        String userText = "Situation report:\n" + situation
-                + (brain.memory().plans.isBlank() ? "" : "\n" + brain.name() + "'s current plans: " + brain.memory().plans)
-                + (brain.memory().dayPlan.day < 0 ? "" : "\nToday is " + brain.memory().dayPlan.describe() + " Pace the work to match.")
+        String userText = context(brain, situation)
                 + "\nWhat just happened: " + event
                 + "\n" + brain.name() + " said out loud: " + (spoken.isBlank() ? "(nothing)" : spoken)
                 + "\n" + (intent == null
                 ? brain.name() + " didn't state an explicit intent. Act only if that reply clearly commits to doing something right now; otherwise do nothing."
                 : "INTENT: " + intent);
+        return run(brain, userText, cancelled);
+    }
 
+    /**
+     * Works on one of the character's goals on its behalf, without asking the character first (it already chose
+     * these goals). Does the next meaningful step, adds sub-goals for blockers, and marks goals done.
+     */
+    public static Outcome pursue(CompanionBrain brain, Goals.Goal goal, String why, String situation, BooleanSupplier cancelled) {
+        String userText = context(brain, situation)
+                + "\nNo new decision from " + brain.name() + "'s mind right now: you're working through the goals it chose, on its behalf."
+                + "\nSelected goal: [" + goal.id + "] " + Goals.chain(brain.memory(), goal) + " (" + why + ")"
+                + (goal.progress.isBlank() ? "" : "\nProgress so far: " + goal.progress)
+                + "\nDo the next meaningful step toward it, the way " + brain.name() + " would (usually 1 to 4 actions), then stop. "
+                + "Use what you remember (places, chests, resources) before searching from scratch. "
+                + "If something you can't do right now is in the way (a missing tool, materials, a place), add a blocking sub-goal with add_goal and work on that instead. "
+                + "Record progress with goal_note, and use goal_done when the selected goal is achieved. "
+                + "If this goal no longer makes sense, say so in your summary instead of forcing it.";
+        return run(brain, userText, cancelled);
+    }
+
+    private static String context(CompanionBrain brain, String situation) {
+        CompanionMemory m = brain.memory();
+        return "Situation report:\n" + situation
+                + (m.plans.isBlank() ? "" : "\n" + brain.name() + "'s plans in its own words: " + m.plans)
+                + "\n" + brain.name() + "'s goals:\n" + Goals.describe(m)
+                + (m.dayPlan.day < 0 ? "" : "Today is " + m.dayPlan.describe() + " Pace the work to match.");
+    }
+
+    private static Outcome run(CompanionBrain brain, String userText, BooleanSupplier cancelled) {
         List<MessageParam> messages = new ArrayList<>();
         messages.add(MessageParam.builder().role(MessageParam.Role.USER).content(userText).build());
         String system = systemPrompt(brain.name(), brain.profile());
@@ -233,6 +259,21 @@ public final class ClaudeActionLayer {
         }
         if (cancelled.getAsBoolean()) return new Outcome("Stopped partway because the character changed their mind.", actions);
         return new Outcome(lastText.isBlank() ? "Done." : lastText, actions);
+    }
+
+    /** A one-off structured answer (no tools), e.g. goal edits. */
+    public static <T> T structured(String prompt, Class<T> type) throws Exception {
+        MessageCreateParams.Builder base = MessageCreateParams.builder()
+                .model(ModConfig.get().claudeModel)
+                .maxTokens(4000L)
+                .addUserMessage(prompt);
+        applyModelOptions(base);
+        StructuredMessageCreateParams<T> params = base.outputConfig(type).build();
+        return client().messages().create(params).content().stream()
+                .flatMap(block -> block.text().stream())
+                .map(t -> t.text())
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("No answer returned"));
     }
 
     /** Turns the character's self-description into a behavior profile. */

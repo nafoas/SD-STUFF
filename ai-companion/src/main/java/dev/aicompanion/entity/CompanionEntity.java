@@ -594,7 +594,14 @@ public class CompanionEntity extends PathAwareEntity {
             world.breakBlock(pos, false, this);
             dev.aicompanion.world.BlockOwnership.get(world).clear(pos);
             dev.aicompanion.world.BuildAwareness.invalidate(pos);
-            if (tool.isDamageable()) tool.damage(1, this, e -> e.sendEquipmentBreakStatus(EquipmentSlot.MAINHAND));
+            if (tool.isDamageable()) {
+                Item toolItem = tool.getItem();
+                tool.damage(1, this, e -> {
+                    e.sendEquipmentBreakStatus(EquipmentSlot.MAINHAND);
+                    CompanionBrain brain = brain();
+                    if (brain != null) brain.onToolBroke(toolItem);
+                });
+            }
             stopBreaking();
             return true;
         }

@@ -343,6 +343,8 @@ public final class CompanionManager {
                 var p = brain.profile();
                 brain.maybeMorning(e.getWorld().getTimeOfDay() / 24000L);
                 brain.maybeCheckIn(now);
+                if (tickCounter % 100 == 0) brain.checkGoals();
+                brain.maybePursue(now);
                 boolean playersAround = false;
                 for (ServerPlayerEntity pl : s.getPlayerManager().getPlayerList()) {
                     if (pl.getWorld() == e.getWorld() && pl.squaredDistanceTo(e) < 48 * 48) playersAround = true;

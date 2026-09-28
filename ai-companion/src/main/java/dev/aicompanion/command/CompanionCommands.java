@@ -62,6 +62,12 @@ public final class CompanionCommands {
             }
             ctx.getSource().sendFeedback(() -> Text.literal(sb.toString()), false);
         }))));
+        root.then(literal("goals").then(argument("name", StringArgumentType.greedyString()).suggests(ACTIVE).executes(ctx -> withBrain(ctx, brain -> {
+            String text = brain.name() + "'s goals (" + (brain.memory().dayPlan.day < 0 ? "no day plan yet" : brain.memory().dayPlan.kind + " day") + "):\n"
+                    + dev.aicompanion.ai.Goals.describe(brain.memory())
+                    + (brain.memory().plans.isBlank() ? "" : "In their words: " + brain.memory().plans);
+            ctx.getSource().sendFeedback(() -> Text.literal(text), false);
+        }))));
         root.then(literal("memory").then(argument("name", StringArgumentType.greedyString()).suggests(ACTIVE).executes(ctx -> withBody(ctx, (brain, e) -> {
             String report = dev.aicompanion.ai.MemoryReport.recall(brain.memory(), e, "");
             ctx.getSource().sendFeedback(() -> Text.literal(brain.name() + " remembers:\n" + report), false);

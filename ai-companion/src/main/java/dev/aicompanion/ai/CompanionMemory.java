@@ -77,6 +77,8 @@ public class CompanionMemory {
         /** open, done, failed, dropped */
         public String status = "open";
         public String result = "";
+        /** The goal that tracks this promise. */
+        public String goalId;
     }
 
     public static class Structure {
@@ -102,6 +104,7 @@ public class CompanionMemory {
     public Map<String, List<Sighting>> sightings = new LinkedHashMap<>();
     public List<Structure> structures = new ArrayList<>();
     public List<Promise> promises = new ArrayList<>();
+    public List<Goals.Goal> goals = new ArrayList<>();
     /** The character's own words on what it's planning and what matters to it right now (updated at check-ins). */
     public String plans = "";
 
@@ -145,6 +148,7 @@ public class CompanionMemory {
         sightings = s;
         structures = new CopyOnWriteArrayList<>(structures == null ? List.of() : structures);
         promises = new CopyOnWriteArrayList<>(promises == null ? List.of() : promises);
+        goals = new CopyOnWriteArrayList<>(goals == null ? List.of() : goals);
         if (plans == null) plans = "";
         if (dayPlan == null) dayPlan = new DayPlan();
         Set<String> perms = ConcurrentHashMap.newKeySet();

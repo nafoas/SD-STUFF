@@ -123,6 +123,20 @@ public final class Actions {
         specs.add(new Spec("adjust_opinion", "Record that the character's feelings about a player changed, when the character's reply clearly shows it.",
                 Map.of("player", str("Player name"), "change", num("-3 to 3"), "reason", str("Why")), List.of("player", "change")));
         specs.add(new Spec("stop", "Stop the current activity and stand still.", Map.of(), List.of()));
+        specs.add(new Spec("add_goal", "Add a goal to the character's goal tree. Use a blocking sub-goal (blocker=true with the parent's id) when something "
+                + "must happen first, e.g. the pickaxe broke while mining: 'get a new pickaxe' blocks 'mine the mountain', which resumes afterwards. "
+                + "Add a checkable condition when possible so it counts as done however it happens (even if someone gives the item).",
+                Map.of("title", str("Short goal title"), "horizon", enm("How big", "short", "medium", "long"),
+                        "importance", num("1-10"), "parent", str("Id of the goal this is a step toward (optional)"),
+                        "blocker", Map.of("type", "boolean", "description", "Parent must wait for this"),
+                        "condition_items", Map.of("type", "array", "items", Map.of("type", "string"), "description", "Done when carrying/storing any of these item ids (optional)"),
+                        "condition_count", num("How many of those items (default 1)"),
+                        "gather", Map.of("type", "boolean", "description", "Count only items gained from now on (for 'collect 20 more X')")),
+                List.of("title", "horizon")));
+        specs.add(new Spec("goal_note", "Record progress on a goal (kept with the goal and shown next time).",
+                Map.of("id", str("Goal id"), "note", str("Progress so far, briefly")), List.of("id", "note")));
+        specs.add(new Spec("goal_done", "Mark a goal achieved (or dropped if it no longer makes sense).",
+                Map.of("id", str("Goal id"), "dropped", Map.of("type", "boolean", "description", "True to drop instead of completing")), List.of("id")));
         return specs;
     }
 
@@ -342,6 +356,40 @@ public final class Actions {
                 else at = c.getBlockPos();
                 BlockPos target = at;
                 c.startTask(new dev.aicompanion.game.tasks.InspectTask(target), done);
+            }
+            case "add_goal" -> {
+                Goals.Condition cond = null;
+                if (in.has("condition_items") && in.get("condition_items").isJsonArray() && in.getAsJsonArray("condition_items").size() > 0) {
+                    cond = new Goals.Condition();
+                    cond.type = "have_item";
+                    for (var el : in.getAsJsonArray("condition_items")) cond.items.add(el.getAsString());
+                    cond.count = Math.max(1, integer(in, "condition_count", 1));
+                    if (in.has("gather") && in.get("gather").getAsBoolean()) cond.type = "gather_item";
+                }
+                String parent = in.has("parent") ? in.get("parent").getAsString() : null;
+                Goals.Goal g = Goals.add(brain.memory(), string(in, "title"), in.has("horizon") ? in.get("horizon").getAsString() : "short",
+                        integer(in, "importance", 6), parent, "self", cond);
+                g.blocker = in.has("blocker") && in.get("blocker").getAsBoolean() && g.parent != null;
+                brain.log("goal", "New goal: " + Goals.chain(brain.memory(), g) + (g.blocker ? " (must happen first)" : ""), false);
+                brain.saveLater();
+                done.complete("Added goal " + g.id + ": " + g.title + ".");
+            }
+            case "goal_note" -> {
+                Goals.Goal g = Goals.find(brain.memory(), string(in, "id"));
+                if (g == null) throw new ActionError("No goal with that id.");
+                g.progress = string(in, "note");
+                g.lastWorked = System.currentTimeMillis();
+                brain.saveLater();
+                done.complete("Noted.");
+            }
+            case "goal_done" -> {
+                Goals.Goal g = Goals.find(brain.memory(), string(in, "id"));
+                if (g == null) throw new ActionError("No goal with that id.");
+                boolean dropped = in.has("dropped") && in.get("dropped").getAsBoolean();
+                Goals.finish(brain.memory(), g, dropped ? "dropped" : "done");
+                brain.log("goal", (dropped ? "Dropped goal: " : "Achieved goal: ") + g.title, !dropped && !g.horizon.equals("short"));
+                brain.saveLater();
+                done.complete(dropped ? "Dropped." : "Marked done.");
             }
             case "recall" -> done.complete(MemoryReport.recall(brain.memory(), c, in.has("query") ? in.get("query").getAsString() : ""));
             case "allow_chest_access" -> {
