@@ -6,6 +6,8 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 import net.minecraft.world.World;
 
+import dev.aicompanion.world.BreakPolicy;
+
 import java.util.HashSet;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -17,6 +19,8 @@ public class CollectBlocksTask extends Task {
     private final int wanted;
     private final int radius;
     private final Set<BlockPos> unreachable = new HashSet<>();
+    private final Set<BlockPos> offLimits = new HashSet<>();
+    private String offLimitsReason = "";
     private BlockPos target;
     private int mined;
     private String lastProblem = "";
@@ -56,14 +60,26 @@ public class CollectBlocksTask extends Task {
         if (!CompanionEntity.canHarvestWith(bestTool(c, state), state)) {
             return finish("Needs a better tool to mine " + name + " (e.g. a " + suggestTool(state) + ")");
         }
+        boolean crop = state.getBlock() instanceof net.minecraft.block.CropBlock;
         if (c.mineStep(target)) {
             mined++;
+            if (crop) replant(c, target, state);
             target = null;
         }
         return null;
     }
 
+    /** Crops always get replanted with their own seeds. */
+    private static void replant(CompanionEntity c, BlockPos pos, BlockState harvested) {
+        net.minecraft.item.Item seed = harvested.getBlock().asItem();
+        BlockState soil = c.getWorld().getBlockState(pos.down());
+        if (c.count(seed) > 0 && soil.isOf(net.minecraft.block.Blocks.FARMLAND) && c.getWorld().getBlockState(pos).isAir()) {
+            c.placeBlock(pos, harvested.getBlock().getDefaultState());
+        }
+    }
+
     private Result finish(String reason) {
+        if (!offLimits.isEmpty()) reason += " (left " + offLimits.size() + " alone: " + offLimitsReason + ")";
         return mined > 0 ? ok("Mined " + mined + " of " + wanted + " " + name + ". " + reason + ".") : fail(reason + ".");
     }
 
@@ -95,7 +111,13 @@ public class CollectBlocksTask extends Task {
                     if (d >= bestDistance || !world.isChunkLoaded(pos)) continue;
                     if (!matcher.test(world.getBlockState(pos))) continue;
                     BlockPos found = pos.toImmutable();
-                    if (unreachable.contains(found) || !exposed(world, found)) continue;
+                    if (unreachable.contains(found) || offLimits.contains(found) || !exposed(world, found)) continue;
+                    String denied = BreakPolicy.check(c, found, BreakPolicy.Purpose.GATHER);
+                    if (denied != null) {
+                        offLimits.add(found);
+                        offLimitsReason = denied;
+                        continue;
+                    }
                     best = found;
                     bestDistance = d;
                 }

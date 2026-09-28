@@ -33,7 +33,19 @@ The personality affects behavior at three levels:
    | Curiosity, diligence, sociability | Restless characters check in on their own more often. |
    | Generosity | Whether it lets strangers look in its bag. |
 
-It also remembers how it feels about each player (hit it and it holds a grudge, give it gifts and it warms up), places you told it to remember, and recent events. All of this survives restarts.
+It also remembers how it feels about each player (hit it and it holds a grudge, give it gifts and it warms up). All of this survives restarts, along with:
+- **An activity log** of everything it did and experienced: tasks, fights, items gained and lost, conversations, decisions.
+- **World memory:** named places (home, farm, mine, storage), what's in every chest it has used (it goes straight to the right chest), resources it has seen and where, and what it built.
+
+## Respecting other people's builds
+
+Companions look at the blocks around them the way a player would. There's nothing to set up and no commands:
+- **Homes:** a build with a bed in it is someone's home and is never touched.
+- **Other builds:** larger builds made of crafted blocks (planks, bricks, glass and so on) are left alone too.
+- **Valuables:** chests, beds, doors and workstations that aren't theirs are never broken.
+- **Fine to break:** natural terrain, and a few stray player blocks, like a wall someone trapped them with, a pillar, or trees grown from planted saplings. Mature crops can be harvested but are always replanted.
+- **Naturally generated structures** (villages, temples, mineshafts...) are fair game unless a player has added blocks to them.
+- **Chests:** they only take from their own chests, unlooted natural chests, or chests of players who told them it's okay.
 
 ## Setup
 
@@ -66,6 +78,8 @@ It also remembers how it feels about each player (hit it and it holds a grudge, 
 | `/companion list` | Where each companion is and what it's doing |
 | `/companion stop <name>` | Make it stop its current activity |
 | `/companion profile <name>` | Show its behavior profile |
+| `/companion log <name>` | Its recent activity log |
+| `/companion memory <name>` | Places, chests and resources it remembers |
 | `/companion reinterview <name>` | Rebuild the profile from a fresh self-description |
 | `/companion debug <name>` | Show its decisions and actions to its owner in chat |
 | `/companion reload` | Reload the config |
@@ -84,6 +98,7 @@ Profiles are saved in `config/ai-companion/profiles/<id>.json`, and you can edit
 | `conversationRadius` | 10 | Distance within which you can keep talking without the name |
 | `hearingRadius` | 0 | If above 0, companions only hear chat within this many blocks |
 | `managePermissionLevel` | 2 | Permission level needed for spawn, dismiss, reinterview and debug |
+| `mischief` | `never` | How far a mean character may go against players. `never`: no tricks that hurt anyone. `pranks`: harmless tricks and fibs. `mean`: may lure mobs toward players, take from their chests, and sabotage small things. Homes and builds are never broken at any level. |
 | `allowPvp` | false | Let companions attack players when their character decides to |
 | `searchRadius` | 32 | How far they look for blocks to mine |
 | `skins` | `{}` | `{"Grug": "Notch"}` uses a Minecraft username's skin, or give a direct 64x64 PNG URL |

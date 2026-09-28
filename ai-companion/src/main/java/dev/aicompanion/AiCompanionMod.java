@@ -2,6 +2,9 @@ package dev.aicompanion;
 
 import dev.aicompanion.command.CompanionCommands;
 import dev.aicompanion.entity.CompanionEntity;
+import dev.aicompanion.world.BlockOwnership;
+import dev.aicompanion.world.BuildAwareness;
+import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
@@ -46,6 +49,14 @@ public class AiCompanionMod implements ModInitializer {
         });
         ServerEntityEvents.ENTITY_UNLOAD.register((entity, world) -> {
             if (entity instanceof CompanionEntity c) CompanionManager.onEntityUnloaded(c);
+        });
+
+        // Forget who placed a block once a player breaks it.
+        PlayerBlockBreakEvents.AFTER.register((world, player, pos, state, blockEntity) -> {
+            if (world instanceof net.minecraft.server.world.ServerWorld sw) {
+                BlockOwnership.get(sw).clear(pos);
+                BuildAwareness.invalidate(pos);
+            }
         });
 
         ServerMessageEvents.CHAT_MESSAGE.register((message, sender, params) ->

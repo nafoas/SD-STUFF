@@ -84,6 +84,10 @@ public class CompanionEntity extends PathAwareEntity {
     private int attackCooldown;
     private int lastEatAge;
 
+    @Nullable private LivingEntity loggedCombatTarget;
+    @Nullable private java.util.Map<Item, Integer> lastInventory;
+    private int lastMobDamageLog = -1000;
+
     // Block breaking state
     @Nullable private BlockPos breakingPos;
     private float breakProgress;
@@ -196,6 +200,7 @@ public class CompanionEntity extends PathAwareEntity {
         cancelTask("Interrupted by a new action.");
         task = newTask;
         taskFuture = future;
+        log("task_start", "Started " + newTask.describe(), false);
         if (newTask.isContinuous()) {
             future.complete("Started: " + newTask.describe() + ". This continues until another action replaces it.");
         }
@@ -227,6 +232,7 @@ public class CompanionEntity extends PathAwareEntity {
         if (getWorld().isClient) return;
         if (age % 4 == 0) pickUpNearbyItems();
         if (age % 40 == 0) equipBestArmor();
+        if (age % 100 == 0) watchInventory();
         if (age % 80 == 0 && getHealth() < getMaxHealth()) heal(1.0f);
         if (attackCooldown > 0) attackCooldown--;
 
@@ -246,6 +252,7 @@ public class CompanionEntity extends PathAwareEntity {
                 taskFuture = null;
                 finished.stop(this);
                 if (future != null && !future.isDone()) future.complete((result.success() ? "Done: " : "Failed: ") + result.message());
+                log("task_end", (result.success() ? "Finished " : "Failed ") + finished.describe() + ": " + result.message(), finished.isMajor());
                 CompanionBrain brain = brain();
                 if (brain != null && finished.isContinuous()) brain.onBodyEvent((result.success() ? "Finished " : "Gave up on ") + finished.describe() + ": " + result.message(), false);
             }
@@ -274,7 +281,9 @@ public class CompanionEntity extends PathAwareEntity {
         }
 
         if (combatTarget != null && (!combatTarget.isAlive() || combatTarget.squaredDistanceTo(this) > 24 * 24)) {
+            log("combat", (combatTarget.isAlive() ? "Lost track of " : "Defeated ") + describeEntity(combatTarget), false);
             combatTarget = null;
+            loggedCombatTarget = null;
         }
 
         // Who is threatening us or our friends?
@@ -324,6 +333,10 @@ public class CompanionEntity extends PathAwareEntity {
     }
 
     private void fight(LivingEntity target) {
+        if (target != loggedCombatTarget) {
+            loggedCombatTarget = target;
+            log("combat", "Fighting " + describeEntity(target), false);
+        }
         equipBestWeapon();
         getLookControl().lookAt(target, 30, 30);
         if (squaredDistanceTo(target) > 2.4 * 2.4) {
@@ -336,6 +349,7 @@ public class CompanionEntity extends PathAwareEntity {
     }
 
     public void flee(Vec3d from) {
+        if (fleeTicks <= 0) log("combat", "Ran away from danger (health " + Math.round(getHealth()) + "/20)", false);
         Vec3d away = NoPenaltyTargeting.findFrom(this, 16, 7, from);
         fleeTarget = away != null ? away : getPos().add(getPos().subtract(from).normalize().multiply(10));
         fleeTicks = 60;
@@ -370,6 +384,41 @@ public class CompanionEntity extends PathAwareEntity {
     }
 
     // ---------------------------------------------------------------- items
+
+    private void watchInventory() {
+        java.util.Map<Item, Integer> now = new java.util.HashMap<>();
+        for (int i = 0; i < inventory.size(); i++) {
+            ItemStack st = inventory.getStack(i);
+            if (!st.isEmpty()) now.merge(st.getItem(), st.getCount(), Integer::sum);
+        }
+        for (EquipmentSlot slot : EquipmentSlot.values()) {
+            ItemStack st = getEquippedStack(slot);
+            if (!st.isEmpty()) now.merge(st.getItem(), st.getCount(), Integer::sum);
+        }
+        if (lastInventory != null) {
+            java.util.List<String> changes = new java.util.ArrayList<>();
+            java.util.Set<Item> all = new java.util.HashSet<>(now.keySet());
+            all.addAll(lastInventory.keySet());
+            for (Item item : all) {
+                int d = now.getOrDefault(item, 0) - lastInventory.getOrDefault(item, 0);
+                if (d != 0) changes.add((d > 0 ? "+" : "") + d + " " + dev.aicompanion.game.Ids.name(item));
+            }
+            if (!changes.isEmpty()) log("items", String.join(", ", changes), false);
+        }
+        lastInventory = now;
+    }
+
+    private static String describeEntity(LivingEntity e) {
+        if (e instanceof PlayerEntity p) return p.getName().getString();
+        if (e instanceof CompanionEntity c) return c.getCharacterName();
+        return "a " + e.getType().getName().getString().toLowerCase();
+    }
+
+    /** Adds an entry to the companion's activity log (no-op if it has no brain). */
+    public void log(String kind, String text, boolean major) {
+        CompanionBrain brain = brain();
+        if (brain != null) brain.log(kind, text, major);
+    }
 
     private void pickUpNearbyItems() {
         Box box = getBoundingBox().expand(1.5, 0.5, 1.5);
@@ -535,6 +584,8 @@ public class CompanionEntity extends PathAwareEntity {
                 }
             }
             world.breakBlock(pos, false, this);
+            dev.aicompanion.world.BlockOwnership.get(world).clear(pos);
+            dev.aicompanion.world.BuildAwareness.invalidate(pos);
             if (tool.isDamageable()) tool.damage(1, this, e -> e.sendEquipmentBreakStatus(EquipmentSlot.MAINHAND));
             stopBreaking();
             return true;
@@ -572,6 +623,12 @@ public class CompanionEntity extends PathAwareEntity {
         } else {
             getWorld().setBlockState(pos, state);
         }
+        dev.aicompanion.world.BlockOwnership owners = dev.aicompanion.world.BlockOwnership.get(serverWorld());
+        String self = dev.aicompanion.world.BlockOwnership.companionOwner(characterId);
+        owners.set(pos, self);
+        dev.aicompanion.world.BuildAwareness.invalidate(pos);
+        if (state.contains(Properties.DOUBLE_BLOCK_HALF)) owners.set(pos.up(), self);
+        if (state.contains(Properties.BED_PART)) owners.set(pos.offset(state.get(Properties.HORIZONTAL_FACING)), self);
         getWorld().playSound(null, pos, state.getSoundGroup().getPlaceSound(), SoundCategory.BLOCKS, 1.0f, 0.8f);
         return true;
     }
@@ -598,6 +655,10 @@ public class CompanionEntity extends PathAwareEntity {
         if (hurt && !getWorld().isClient && source.getAttacker() instanceof PlayerEntity player) {
             CompanionBrain brain = brain();
             if (brain != null) brain.onHitByPlayer(player.getName().getString());
+        } else if (hurt && !getWorld().isClient && age - lastMobDamageLog > 100) {
+            lastMobDamageLog = age;
+            String by = source.getAttacker() instanceof LivingEntity le ? describeEntity(le) : source.getName();
+            log("damage", "Hurt by " + by + " (health " + Math.round(getHealth()) + "/20)", false);
         }
         return hurt;
     }

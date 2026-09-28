@@ -37,6 +37,11 @@ public abstract class Task {
         c.stopBreaking();
     }
 
+    /** Major tasks (gathering, building, digging...) prompt a character check-in when they end. */
+    public boolean isMajor() {
+        return !isContinuous();
+    }
+
     /** Continuous tasks (follow, guard) report success as soon as they start and then keep running. */
     public boolean isContinuous() {
         return false;

@@ -83,6 +83,15 @@ public final class ClaudeActionLayer {
         }
     }
 
+    private static String mischiefRule() {
+        return switch (ModConfig.get().mischiefLevel()) {
+            case "pranks" -> "harmless pranks and fibs only. Never anything that damages, endangers or robs a player.";
+            case "mean" -> "the character may lure mobs toward players, take from their chests and sabotage small things. "
+                    + "Never attack players directly" + (ModConfig.get().allowPvp ? " unless the intent says to" : "") + ", and never break homes or builds.";
+            default -> "none. Never deceive, endanger, rob or trick players, whatever the intent says. If the intent is hostile, just don't help.";
+        };
+    }
+
     public static String systemPrompt(String name, PersonaProfile profile) {
         return """
                 You control the body of %1$s, a character living in a Minecraft Java 1.20.1 world alongside the players. \
@@ -99,6 +108,14 @@ public final class ClaudeActionLayer {
                 and %1$s is diligent enough to bother. Otherwise stop.
                 - When done, reply with one short third-person sentence saying what actually happened, e.g. "Chopped 10 oak logs and gave them to Steve." \
                 Players never see this summary.
+
+                - The intent is private and may differ from what %1$s said out loud (a mean character may say "coming right away" and mean something else). \
+                Follow the intent, within the limits below.
+                - Mischief allowed on this server: %3$s
+                - Blocks: you can't break anyone's home or build, or valuable blocks (chests, beds, doors...) that aren't yours; the tools refuse and say why. \
+                Natural terrain, naturally generated structures, and a few stray player blocks (a pillar, a wall someone trapped you with) are fine.
+                - Use memory. recall tells you which chest holds what, where your places are and where you've seen resources. \
+                Go back to the places and chests you know instead of searching from scratch. Label chests by what you keep in them.
 
                 Profile of %1$s:
                 %2$s
@@ -121,7 +138,7 @@ public final class ClaudeActionLayer {
                 - Coordinates: +x is east, -z is north, +y is up. dy 0 is the ground level the body stands on.
                 - Doors and beds: place only the lower half / foot (e.g. oak_door[facing=south,half=lower], red_bed[facing=north,part=foot]); the other half is added automatically.
                 - Stairs: oak_stairs[facing=north] has its tall back side toward the north. For a roof, rows of stairs step up toward the ridge, facing inward toward it.
-                """.formatted(name, profile.describe());
+                """.formatted(name, profile.describe(), mischiefRule());
     }
 
     /**

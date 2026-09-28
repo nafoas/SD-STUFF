@@ -4,16 +4,25 @@
   "version": "${version}",
   "name": "AI Companion",
   "description": "AI companions driven by your AICord characters.",
-  "authors": ["nafoas"],
+  "authors": [
+    "nafoas"
+  ],
   "environment": "*",
   "entrypoints": {
-    "main": ["dev.aicompanion.AiCompanionMod"],
-    "client": ["dev.aicompanion.client.AiCompanionClient"]
+    "main": [
+      "dev.aicompanion.AiCompanionMod"
+    ],
+    "client": [
+      "dev.aicompanion.client.AiCompanionClient"
+    ]
   },
   "depends": {
     "fabricloader": ">=0.15.0",
     "minecraft": "~1.20.1",
     "java": ">=17",
     "fabric-api": "*"
-  }
+  },
+  "mixins": [
+    "ai-companion.mixins.json"
+  ]
 }

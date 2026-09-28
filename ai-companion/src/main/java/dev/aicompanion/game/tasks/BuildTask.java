@@ -10,6 +10,8 @@ import net.minecraft.item.Item;
 import net.minecraft.registry.tag.BlockTags;
 import net.minecraft.util.math.BlockPos;
 
+import dev.aicompanion.world.BreakPolicy;
+
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -24,6 +26,8 @@ public class BuildTask extends Task {
     public record Placement(BlockPos pos, BlockState state) {}
 
     private final String label;
+    private final String purpose;
+    private final List<Placement> all;
     private final List<Placement> remaining;
     private final int total;
     private int placed;
@@ -32,8 +36,10 @@ public class BuildTask extends Task {
     private int placeCooldown;
     private final List<String> problems = new ArrayList<>();
 
-    public BuildTask(String label, List<Placement> placements) {
+    public BuildTask(String label, String purpose, List<Placement> placements) {
         this.label = label;
+        this.purpose = purpose == null ? "" : purpose;
+        this.all = List.copyOf(placements);
         List<Placement> sorted = new ArrayList<>(placements);
         sorted.sort(Comparator.comparingInt((Placement p) -> p.pos().getY()).thenComparingInt(p -> p.pos().getX()).thenComparingInt(p -> p.pos().getZ()));
         this.remaining = sorted;
@@ -66,7 +72,7 @@ public class BuildTask extends Task {
 
     @Override
     protected Result step(CompanionEntity c) {
-        if (ticks > 20 * 60 * 10) return finish("ran out of time");
+        if (ticks > 20 * 60 * 10) return finish(c, "ran out of time");
         while (!remaining.isEmpty()) {
             Placement next = remaining.get(0);
             BlockState current = c.getWorld().getBlockState(next.pos());
@@ -86,11 +92,18 @@ public class BuildTask extends Task {
             }
             c.getNavigation().stop();
             if (next.state().isAir()) {
+                String denied = BreakPolicy.check(c, next.pos(), BreakPolicy.Purpose.GATHER);
+                if (denied != null) {
+                    skipped++;
+                    if (problems.size() < 3) problems.add("left " + Ids.name(current.getBlock()) + " at " + next.pos().toShortString() + " (" + denied + ")");
+                    remaining.remove(0);
+                    return null;
+                }
                 if (c.mineStep(next.pos())) remaining.remove(0);
                 return null;
             }
             if (!current.isReplaceable() && !current.isAir()) {
-                if (isNatural(current)) {
+                if (isNatural(current) && BreakPolicy.allowed(c, next.pos(), BreakPolicy.Purpose.GATHER)) {
                     c.mineStep(next.pos());
                     return null;
                 }
@@ -118,7 +131,7 @@ public class BuildTask extends Task {
             blockedTicks = 0;
             if (placeCooldown-- > 0) return null;
             if (!c.placeBlock(next.pos(), next.state())) {
-                return finish("ran out of " + Ids.name(next.state().getBlock().asItem()));
+                return finish(c, "ran out of " + Ids.name(next.state().getBlock().asItem()));
             }
             placed++;
             remaining.remove(0);
@@ -126,7 +139,40 @@ public class BuildTask extends Task {
             placeCooldown = 3; // about five blocks a second, like a quick player
             return null;
         }
-        return finish("finished");
+        return finish(c, "finished");
+    }
+
+    private Result finish(CompanionEntity c, String reason) {
+        if (placed > 0 && total > 1) remember(c);
+        return finish(reason);
+    }
+
+    /** Remembers what was built and where; homes, farms, mines and storage also become named places. */
+    private void remember(CompanionEntity c) {
+        var brain = c.brain();
+        if (brain == null) return;
+        String dim = c.getWorld().getRegistryKey().getValue().toString();
+        dev.aicompanion.ai.CompanionMemory.Structure st = new dev.aicompanion.ai.CompanionMemory.Structure();
+        st.label = label;
+        st.purpose = purpose;
+        st.dimension = dim;
+        st.minX = st.minY = st.minZ = Integer.MAX_VALUE;
+        st.maxX = st.maxY = st.maxZ = Integer.MIN_VALUE;
+        for (Placement p : all) {
+            st.minX = Math.min(st.minX, p.pos().getX()); st.maxX = Math.max(st.maxX, p.pos().getX());
+            st.minY = Math.min(st.minY, p.pos().getY()); st.maxY = Math.max(st.maxY, p.pos().getY());
+            st.minZ = Math.min(st.minZ, p.pos().getZ()); st.maxZ = Math.max(st.maxZ, p.pos().getZ());
+        }
+        st.built = System.currentTimeMillis();
+        brain.memory().addStructure(st);
+        if (List.of("home", "farm", "mine", "storage").contains(purpose)) {
+            var loc = new dev.aicompanion.ai.CompanionMemory.Location(dim, (st.minX + st.maxX) / 2, st.minY, (st.minZ + st.maxZ) / 2);
+            loc.type = purpose;
+            loc.note = label;
+            String key = label.toLowerCase();
+            brain.memory().places.put(key, loc);
+        }
+        brain.saveLater();
     }
 
     private Result finish(String reason) {

@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.aicompanion.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": [
+    "BlockItemMixin",
+    "LootableContainerAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

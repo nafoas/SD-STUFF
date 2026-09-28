@@ -1,15 +1,26 @@
 package dev.aicompanion.ai;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
-/** What a companion remembers across sessions. Saved to config/ai-companion/memory/<id>.json. */
+/**
+ * What a companion remembers across sessions: feelings about players, named places, what's in which chest,
+ * resources it has seen, what it built, and a running activity log. Saved to config/ai-companion/memory/<id>.json.
+ * Touched by the server, mind and body threads, so collections are concurrent (see {@link #makeThreadSafe()}).
+ */
 public class CompanionMemory {
     public static class Location {
         public String dimension;
         public int x, y, z;
+        /** home, farm, mine, storage, path, other */
+        public String type = "other";
+        public String note = "";
 
         public Location() {}
 
@@ -21,16 +32,91 @@ public class CompanionMemory {
         }
     }
 
+    public static class JournalEntry {
+        public long time;
+        /** task_start, task_end, combat, damage, items, gift, chat, said, decision, discovery, death, need, note */
+        public String kind;
+        public String text;
+        /** Major entries (a big task ending, dying) trigger a character check-in. */
+        public boolean major;
+
+        public JournalEntry() {}
+
+        public JournalEntry(long time, String kind, String text, boolean major) {
+            this.time = time;
+            this.kind = kind;
+            this.text = text;
+            this.major = major;
+        }
+    }
+
+    public static class ChestRecord {
+        public String dimension;
+        public int x, y, z;
+        /** "self", "natural", or the name of the player who placed it */
+        public String owner = "";
+        public String label = "";
+        public Map<String, Integer> contents = new LinkedHashMap<>();
+        public long seen;
+    }
+
+    public static class Sighting {
+        public String dimension;
+        public int x, y, z;
+        public long seen;
+    }
+
+    public static class Structure {
+        public String label;
+        public String purpose = "";
+        public String dimension;
+        public int minX, minY, minZ, maxX, maxY, maxZ;
+        public long built;
+    }
+
     /** How the character feels about each player, from -10 (hates) to 10 (adores). Keyed by lowercase name. */
     public Map<String, Integer> opinions = new LinkedHashMap<>();
     public Map<String, Location> places = new LinkedHashMap<>();
-    /** Recent notable events, oldest first. */
+    /** Short notes on recent events, oldest first (fed to the character with every message). */
     public List<String> events = new ArrayList<>();
     /** Recent conversation with the character AI (compact form, without the situation reports). */
     public List<AicordClient.ChatMessage> conversation = new ArrayList<>();
+    /** Everything the body did and experienced, oldest first. */
+    public List<JournalEntry> journal = new ArrayList<>();
+    /** Chests it has looked into, keyed "dimension|x,y,z". */
+    public Map<String, ChestRecord> chests = new LinkedHashMap<>();
+    /** Resources and creatures it has seen, by name (iron_ore, oak_log, sheep, village...). */
+    public Map<String, List<Sighting>> sightings = new LinkedHashMap<>();
+    public List<Structure> structures = new ArrayList<>();
+    /** Players (lowercase) who said the companion may take things from their chests. */
+    public Set<String> chestPermissions = ConcurrentHashMap.newKeySet();
 
     private static final int MAX_EVENTS = 30;
     private static final int MAX_CONVERSATION = 24;
+    private static final int MAX_JOURNAL = 300;
+    private static final int MAX_SIGHTINGS_PER_KIND = 6;
+
+    public void makeThreadSafe() {
+        opinions = new ConcurrentHashMap<>(opinions == null ? Map.of() : opinions);
+        places = new ConcurrentHashMap<>(places == null ? Map.of() : places);
+        events = new CopyOnWriteArrayList<>(events == null ? List.of() : events);
+        conversation = new CopyOnWriteArrayList<>(conversation == null ? List.of() : conversation);
+        journal = new CopyOnWriteArrayList<>(journal == null ? List.of() : journal);
+        chests = new ConcurrentHashMap<>(chests == null ? Map.of() : chests);
+        Map<String, List<Sighting>> s = new ConcurrentHashMap<>();
+        if (sightings != null) sightings.forEach((k, v) -> s.put(k, new CopyOnWriteArrayList<>(v)));
+        sightings = s;
+        structures = new CopyOnWriteArrayList<>(structures == null ? List.of() : structures);
+        Set<String> perms = ConcurrentHashMap.newKeySet();
+        if (chestPermissions != null) perms.addAll(chestPermissions);
+        chestPermissions = perms;
+        for (Location l : places.values()) {
+            if (l.type == null) l.type = "other";
+            if (l.note == null) l.note = "";
+        }
+    }
+
+    // ------------------------------------------------------------------ opinions
 
     public int opinionOf(String player) {
         return opinions.getOrDefault(player.toLowerCase(), 0);
@@ -41,6 +127,16 @@ public class CompanionMemory {
         opinions.put(player.toLowerCase(), value);
         return value;
     }
+
+    public static String describeOpinion(int value) {
+        if (value <= -7) return "hate";
+        if (value <= -3) return "dislike";
+        if (value < 3) return "neutral";
+        if (value < 7) return "like";
+        return "adore";
+    }
+
+    // ------------------------------------------------------------------ events, conversation, journal
 
     public void addEvent(String event) {
         events.add(event);
@@ -54,11 +150,73 @@ public class CompanionMemory {
         while (!conversation.isEmpty() && !conversation.get(0).role().equals("user")) conversation.remove(0);
     }
 
-    public static String describeOpinion(int value) {
-        if (value <= -7) return "hate";
-        if (value <= -3) return "dislike";
-        if (value < 3) return "neutral";
-        if (value < 7) return "like";
-        return "adore";
+    public void log(String kind, String text, boolean major) {
+        journal.add(new JournalEntry(System.currentTimeMillis(), kind, text, major));
+        while (journal.size() > MAX_JOURNAL) journal.remove(0);
+    }
+
+    public List<JournalEntry> journalSince(long time) {
+        List<JournalEntry> out = new ArrayList<>();
+        for (JournalEntry e : journal) if (e.time > time) out.add(e);
+        return out;
+    }
+
+    public List<JournalEntry> recentJournal(int n) {
+        List<JournalEntry> all = List.copyOf(journal);
+        return all.subList(Math.max(0, all.size() - n), all.size());
+    }
+
+    // ------------------------------------------------------------------ chests
+
+    public static String key(String dimension, int x, int y, int z) {
+        return dimension + "|" + x + "," + y + "," + z;
+    }
+
+    public void recordChest(ChestRecord record) {
+        chests.put(key(record.dimension, record.x, record.y, record.z), record);
+    }
+
+    public void forgetChest(String dimension, int x, int y, int z) {
+        chests.remove(key(dimension, x, y, z));
+    }
+
+    /** Chests believed to contain an item, most recently seen first. */
+    public List<ChestRecord> chestsWith(String item) {
+        List<ChestRecord> out = new ArrayList<>();
+        for (ChestRecord r : chests.values()) if (r.contents.getOrDefault(item, 0) > 0) out.add(r);
+        out.sort(Comparator.comparingLong((ChestRecord r) -> r.seen).reversed());
+        return out;
+    }
+
+    // ------------------------------------------------------------------ sightings and structures
+
+    public void sighted(String kind, String dimension, int x, int y, int z, long now) {
+        List<Sighting> list = sightings.computeIfAbsent(kind, k -> new CopyOnWriteArrayList<>());
+        for (Sighting s : list) {
+            if (s.dimension.equals(dimension) && Math.abs(s.x - x) + Math.abs(s.y - y) + Math.abs(s.z - z) < 12) {
+                s.seen = now;
+                return;
+            }
+        }
+        Sighting s = new Sighting();
+        s.dimension = dimension;
+        s.x = x;
+        s.y = y;
+        s.z = z;
+        s.seen = now;
+        list.add(s);
+        if (list.size() > MAX_SIGHTINGS_PER_KIND) {
+            list.stream().min(Comparator.comparingLong(v -> v.seen)).ifPresent(list::remove);
+        }
+    }
+
+    public void forgetSighting(String kind, String dimension, int x, int y, int z) {
+        List<Sighting> list = sightings.get(kind);
+        if (list != null) list.removeIf(s -> s.dimension.equals(dimension) && Math.abs(s.x - x) + Math.abs(s.y - y) + Math.abs(s.z - z) < 12);
+    }
+
+    public void addStructure(Structure s) {
+        structures.add(s);
+        while (structures.size() > 60) structures.remove(0);
     }
 }

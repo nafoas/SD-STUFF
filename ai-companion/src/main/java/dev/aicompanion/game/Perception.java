@@ -73,20 +73,19 @@ public final class Perception {
         for (LivingEntity e : world.getEntitiesByClass(LivingEntity.class, c.getBoundingBox().expand(24), e -> e != c && e.isAlive() && !(e instanceof PlayerEntity))) {
             String name = e instanceof CompanionEntity other ? other.getCharacterName() + " (a companion like you)" : e.getType().getName().getString().toLowerCase();
             int d = (int) Math.round(Math.sqrt(e.squaredDistanceTo(c)));
+            if (memory != null && (e instanceof net.minecraft.entity.passive.AnimalEntity || e instanceof net.minecraft.entity.passive.VillagerEntity)) {
+                BlockPos p = e.getBlockPos();
+                memory.sighted(net.minecraft.registry.Registries.ENTITY_TYPE.getId(e.getType()).getPath(), world.getRegistryKey().getValue().toString(), p.getX(), p.getY(), p.getZ(), System.currentTimeMillis());
+            }
             creatures.merge(name, new int[]{1, d}, (a, b) -> new int[]{a[0] + 1, Math.min(a[1], b[1])});
         }
         List<String> cr = new ArrayList<>();
         creatures.forEach((name, v) -> cr.add(v[0] + " " + name + " (nearest " + v[1] + " blocks)"));
         sb.append("Creatures nearby: ").append(cr.isEmpty() ? "none" : String.join(", ", cr)).append(".\n");
 
-        sb.append("Notable blocks nearby: ").append(notableBlocks(c)).append(".\n");
+        sb.append("Notable blocks nearby: ").append(notableBlocks(c, memory)).append(".\n");
 
-        if (memory != null && !memory.places.isEmpty()) {
-            List<String> places = new ArrayList<>();
-            memory.places.forEach((name, loc) -> places.add(name + " (" + loc.x + ", " + loc.y + ", " + loc.z
-                    + (loc.dimension.equals(world.getRegistryKey().getValue().toString()) ? "" : ", other dimension") + ")"));
-            sb.append("Places you remember: ").append(String.join("; ", places)).append(".\n");
-        }
+        if (memory != null) sb.append(dev.aicompanion.ai.MemoryReport.summary(memory, c));
         return sb.toString();
     }
 
@@ -102,8 +101,9 @@ public final class Perception {
         return String.join(", ", parts);
     }
 
-    private static String notableBlocks(CompanionEntity c) {
+    private static String notableBlocks(CompanionEntity c, @Nullable CompanionMemory memory) {
         Map<Block, int[]> found = new LinkedHashMap<>();
+        Map<Block, BlockPos> nearestPos = new LinkedHashMap<>();
         BlockPos origin = c.getBlockPos();
         int r = 16;
         BlockPos.Mutable p = new BlockPos.Mutable();
@@ -114,8 +114,26 @@ public final class Perception {
                     BlockState s = c.getWorld().getBlockState(p);
                     if (!isNotable(s)) continue;
                     int d = (int) Math.round(Math.sqrt(dx * dx + dy * dy + dz * dz));
+                    int[] prev = found.get(s.getBlock());
+                    if (prev == null || d < prev[1]) nearestPos.put(s.getBlock(), p.toImmutable());
                     found.merge(s.getBlock(), new int[]{1, d}, (a, b) -> new int[]{a[0] + 1, Math.min(a[1], b[1])});
                 }
+            }
+        }
+        if (memory != null) {
+            // Object permanence: remember where resources are, and forget ones that are gone.
+            String dim = c.getWorld().getRegistryKey().getValue().toString();
+            long now = System.currentTimeMillis();
+            nearestPos.forEach((block, pos) -> {
+                String kind = sightingKind(block);
+                if (kind != null) memory.sighted(kind, dim, pos.getX(), pos.getY(), pos.getZ(), now);
+            });
+            for (var entry : memory.sightings.entrySet()) {
+                String k = entry.getKey();
+                boolean blockKind = k.endsWith("_ore") || k.endsWith("_log") || List.of("ancient_debris", "sugar_cane", "pumpkin", "melon", "lava").contains(k);
+                if (!blockKind) continue; // creatures move around; only blocks can be checked like this
+                entry.getValue().removeIf(sight -> sight.dimension.equals(dim) && origin.getSquaredDistance(sight.x, sight.y, sight.z) < 10 * 10
+                        && found.keySet().stream().noneMatch(b -> entry.getKey().equals(sightingKind(b))));
             }
         }
         if (found.isEmpty()) return "nothing special";
@@ -123,6 +141,16 @@ public final class Perception {
         found.entrySet().stream().sorted((a, b) -> a.getValue()[1] - b.getValue()[1]).limit(14)
                 .forEach(e -> parts.add(e.getValue()[0] + " " + Ids.name(e.getKey()) + " (nearest " + e.getValue()[1] + ")"));
         return String.join(", ", parts);
+    }
+
+    /** Name a resource is remembered under: deepslate ores count as the plain ore. */
+    @Nullable
+    private static String sightingKind(Block block) {
+        String path = Ids.name(block);
+        if (path.startsWith("deepslate_") && path.endsWith("_ore")) path = path.substring("deepslate_".length());
+        if (path.endsWith("_ore") || path.endsWith("_log") || path.equals("ancient_debris") || path.equals("sugar_cane")
+                || path.equals("pumpkin") || path.equals("melon") || path.equals("lava")) return path;
+        return null;
     }
 
     private static boolean isNotable(BlockState s) {

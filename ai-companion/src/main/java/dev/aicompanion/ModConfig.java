@@ -41,6 +41,12 @@ public class ModConfig {
 
     /** Permission level needed for /companion spawn, dismiss and reinterview (0 = everyone, 2 = ops). */
     public int managePermissionLevel = 2;
+    /**
+     * How far a mean character may go against players. "never" (default): no deception or tricks that hurt anyone.
+     * "pranks": harmless tricks and fibs. "mean": may lure mobs toward players, steal from their chests and sabotage
+     * small things. Direct attacks still need allowPvp, and homes/builds are never broken at any level.
+     */
+    public String mischief = "never";
     /** Allow companions to attack players when their character decides to. */
     public boolean allowPvp = false;
     /** Blocks the companion searches for resources in. */
@@ -88,6 +94,11 @@ public class ModConfig {
         }
         instance = config;
         return config;
+    }
+
+    public String mischiefLevel() {
+        String m = mischief == null ? "never" : mischief.trim().toLowerCase();
+        return m.equals("pranks") || m.equals("mean") ? m : "never";
     }
 
     public String skinFor(String characterName) {

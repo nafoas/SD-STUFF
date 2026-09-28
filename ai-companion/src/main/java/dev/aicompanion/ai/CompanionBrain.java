@@ -21,7 +21,6 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -129,6 +128,7 @@ public class CompanionBrain {
 
     public void onChat(String speaker, String message, int depth) {
         lastTalked.put(speaker.toLowerCase(), System.currentTimeMillis());
+        log("chat", speaker + ": " + message, false);
         stimulate(new Stimulus("chat", speaker + " says to you: \"" + message + "\"", speaker, depth));
     }
 
@@ -139,7 +139,7 @@ public class CompanionBrain {
 
     public void onHitByPlayer(String player) {
         memory.adjustOpinion(player, -2);
-        dirty = true;
+        log("damage", player + " hit you", false);
         if (allow("hit:" + player, 8000)) {
             CompanionEntity e = entity();
             String health = e == null ? "" : " (your health: " + Math.round(e.getHealth()) + "/20)";
@@ -151,13 +151,14 @@ public class CompanionBrain {
         if (allow("giftopinion:" + player, 30000)) memory.adjustOpinion(player, 1);
         dirty = true;
         memory.addEvent(player + " gave you " + what);
+        log("gift", player + " gave you " + what, false);
         if (allow("gift:" + player, 15000)) stimulate(new Stimulus("gift", player + " gave you " + what + ".", player, 0));
     }
 
     public void onDeath(String deathMessage) {
         planGeneration.incrementAndGet();
         memory.addEvent("You died: " + deathMessage + ". You dropped everything you carried.");
-        dirty = true;
+        log("death", deathMessage + " (dropped everything)", true);
         CompanionManager.broadcast(Text.literal(deathMessage).formatted(Formatting.GRAY));
     }
 
@@ -263,6 +264,7 @@ public class CompanionBrain {
         if (intent != null && CONTINUE.matcher(intent).matches() && (planRunning.get() || e.currentTaskDescription() != null)) return;
         if (intent == null && !s.kind().equals("chat")) return;
         memory.addEvent("You decided: " + (intent == null ? spoken : intent));
+        log("decision", intent == null ? spoken : intent, false);
         startPlan(s, spoken, intent, situation);
     }
 
@@ -293,6 +295,7 @@ public class CompanionBrain {
         String clean = text.replace('\n', ' ').replaceAll("\\s+", " ").trim();
         if (clean.length() > 400) clean = clean.substring(0, 397) + "...";
         String line = clean;
+        log("said", line, false);
         CompanionManager.broadcast(Text.literal("<" + name + "> ").formatted(Formatting.AQUA).append(Text.literal(line).formatted(Formatting.WHITE)));
         CompanionManager.companionSpoke(this, line, depth);
     }
@@ -395,11 +398,13 @@ public class CompanionBrain {
         } catch (Exception e) {
             AiCompanionMod.LOGGER.error("Could not load memory for {}", name, e);
         }
-        // Thread-safe collections: memory is touched by the server, mind and body threads.
-        memory.opinions = new ConcurrentHashMap<>(memory.opinions == null ? Map.of() : memory.opinions);
-        memory.places = new ConcurrentHashMap<>(memory.places == null ? Map.of() : memory.places);
-        memory.events = new CopyOnWriteArrayList<>(memory.events == null ? List.of() : memory.events);
-        memory.conversation = new CopyOnWriteArrayList<>(memory.conversation == null ? List.of() : memory.conversation);
+        memory.makeThreadSafe();
+    }
+
+    /** Adds an entry to the activity log. Major entries (a big task ending, dying) prompt a character check-in. */
+    public void log(String kind, String text, boolean major) {
+        memory.log(kind, text, major);
+        dirty = true;
     }
 
     public void saveLater() {

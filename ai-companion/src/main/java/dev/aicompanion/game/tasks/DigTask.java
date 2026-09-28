@@ -6,6 +6,8 @@ import net.minecraft.fluid.FluidState;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 
+import dev.aicompanion.world.BreakPolicy;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -53,6 +55,11 @@ public class DigTask extends Task {
             BlockState state = c.getWorld().getBlockState(pos);
             if (state.isAir() || state.getCollisionShape(c.getWorld(), pos).isEmpty() && state.getFluidState().isEmpty()) continue;
             if (state.getHardness(c.getWorld(), pos) < 0) return fail("Hit an unbreakable block.");
+            String denied = BreakPolicy.check(c, pos, BreakPolicy.Purpose.GATHER);
+            if (denied != null) {
+                return progress > 0 ? ok("Dug " + progress + " blocks, then stopped: won't break " + state.getBlock().getName().getString() + " because " + denied + ".")
+                        : fail("Won't dig there: " + denied + ".");
+            }
             c.equipBestToolFor(state);
             if (!CompanionEntity.canHarvestWith(c.getMainHandStack(), state) && state.getHardness(c.getWorld(), pos) > 2.5f) {
                 return fail("Hit " + state.getBlock().getName().getString() + " and needs a better pickaxe.");

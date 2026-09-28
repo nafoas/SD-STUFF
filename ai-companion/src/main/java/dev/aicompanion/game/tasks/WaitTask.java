@@ -10,6 +10,11 @@ public class WaitTask extends Task {
     }
 
     @Override
+    public boolean isMajor() {
+        return false;
+    }
+
+    @Override
     public String describe() {
         return "waiting";
     }

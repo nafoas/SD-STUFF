@@ -54,6 +54,18 @@ public final class CompanionCommands {
         root.then(literal("profile").then(argument("name", StringArgumentType.greedyString()).suggests(ACTIVE).executes(ctx -> withBrain(ctx, brain -> {
             ctx.getSource().sendFeedback(() -> Text.literal(brain.name() + (brain.hasProfile() ? "" : " (not interviewed yet)") + ":\n" + brain.profile().describe()), false);
         }))));
+        root.then(literal("log").then(argument("name", StringArgumentType.greedyString()).suggests(ACTIVE).executes(ctx -> withBrain(ctx, brain -> {
+            StringBuilder sb = new StringBuilder(brain.name() + "'s recent activity:");
+            java.text.SimpleDateFormat time = new java.text.SimpleDateFormat("HH:mm");
+            for (var e : brain.memory().recentJournal(20)) {
+                sb.append("\n ").append(time.format(new java.util.Date(e.time))).append(" [").append(e.kind).append("] ").append(e.text);
+            }
+            ctx.getSource().sendFeedback(() -> Text.literal(sb.toString()), false);
+        }))));
+        root.then(literal("memory").then(argument("name", StringArgumentType.greedyString()).suggests(ACTIVE).executes(ctx -> withBody(ctx, (brain, e) -> {
+            String report = dev.aicompanion.ai.MemoryReport.recall(brain.memory(), e, "");
+            ctx.getSource().sendFeedback(() -> Text.literal(brain.name() + " remembers:\n" + report), false);
+        }))));
         root.then(literal("reinterview").requires(CompanionCommands::canManage)
                 .then(argument("name", StringArgumentType.greedyString()).suggests(ACTIVE).executes(ctx -> withBrain(ctx, brain -> {
                     ctx.getSource().sendFeedback(() -> Text.literal("Asking " + brain.name() + " about themselves again...").formatted(Formatting.GRAY), false);

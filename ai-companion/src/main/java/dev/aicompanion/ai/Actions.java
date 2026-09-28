@@ -83,6 +83,7 @@ public final class Actions {
                 + "Boxes are filled cuboids (hollow=true gives walls/floor/ceiling only). Later entries overwrite earlier ones, so add doors/windows after walls; use block 'air' to carve openings. "
                 + "dx = east(+)/west(-), dy = up, dz = south(+)/north(-). dy=0 is ground level where the companion stands.",
                 Map.of("label", str("What this is, e.g. 'small spruce cabin'"),
+                        "purpose", enm("What it's for (it's remembered as a place)", "home", "farm", "mine", "storage", "path", "decoration", "other"),
                         "origin_x", num("World X of the origin (default: 3 blocks in front of you)"),
                         "origin_y", num("World Y of the origin"),
                         "origin_z", num("World Z of the origin"),
@@ -99,13 +100,23 @@ public final class Actions {
                 Map.of("player", str("Player name"), "item", str("Item id"), "count", num("How many")), List.of("player", "item", "count")));
         specs.add(new Spec("attack", "Hunt and fight creatures nearby. Target is a mob type (zombie, cow, skeleton), 'monsters' for any hostile mob, or a player name.",
                 Map.of("target", str("What to attack"), "count", num("How many to defeat (default 1)")), List.of("target")));
-        specs.add(new Spec("chest", "Store items in, or take items from, the nearest chest or barrel (within 16 blocks).",
-                Map.of("action", enm("deposit or withdraw", "deposit", "withdraw"), "item", str("Item id (omit for everything)"), "count", num("How many (omit for all)")),
+        specs.add(new Spec("chest", "Store items in, or take items from, a chest or barrel. Without coordinates: deposits go into the nearest chest of your own; "
+                + "withdrawals use the chest memory says holds the item, else the nearest one you may take from. You may only take from your own chests, "
+                + "unlooted natural ones, or those of players who said you could. Every chest you use is remembered with its contents.",
+                Map.of("action", enm("deposit or withdraw", "deposit", "withdraw"), "item", str("Item id (omit for everything)"), "count", num("How many (omit for all)"),
+                        "x", num("Chest X (optional)"), "y", num("Chest Y"), "z", num("Chest Z"), "label", str("Optional label for this chest, e.g. 'ores', 'food', 'tools'")),
                 List.of("action")));
+        specs.add(new Spec("recall", "Look things up in memory without walking anywhere: which chests hold an item, known places, resources you've seen and where, and things you built. "
+                + "Give an item/resource name to search for it, or omit to get an overview.",
+                Map.of("query", str("Item, resource or place to look for (optional)")), List.of()));
+        specs.add(new Spec("allow_chest_access", "Record that a player said you may (or may no longer) take things from their chests. Only when they clearly said so.",
+                Map.of("player", str("Player name"), "allowed", Map.of("type", "boolean")), List.of("player", "allowed")));
         specs.add(new Spec("equip", "Hold an item from the inventory in the main hand.", Map.of("item", str("Item id")), List.of("item")));
         specs.add(new Spec("wait", "Do nothing for a while.", Map.of("seconds", num("How long, max 300")), List.of("seconds")));
-        specs.add(new Spec("remember_place", "Remember the current position under a name (e.g. home, mine, farm) to go back later.",
-                Map.of("name", str("Name for this place")), List.of("name")));
+        specs.add(new Spec("remember_place", "Remember the current position under a name to go back later, with what kind of place it is.",
+                Map.of("name", str("Name for this place, e.g. home, iron mine, wheat farm"),
+                        "type", enm("Kind of place", "home", "farm", "mine", "storage", "path", "other"),
+                        "note", str("Anything worth remembering about it (optional)")), List.of("name")));
         specs.add(new Spec("adjust_opinion", "Record that the character's feelings about a player changed, when the character's reply clearly shows it.",
                 Map.of("player", str("Player name"), "change", num("-3 to 3"), "reason", str("Why")), List.of("player", "change")));
         specs.add(new Spec("stop", "Stop the current activity and stand still.", Map.of(), List.of()));
@@ -198,9 +209,12 @@ public final class Actions {
             case "remember_place" -> {
                 String place = string(in, "name");
                 BlockPos p = c.getBlockPos();
-                brain.memory().places.put(place.toLowerCase(), new CompanionMemory.Location(c.getWorld().getRegistryKey().getValue().toString(), p.getX(), p.getY(), p.getZ()));
-                brain.saveLater();
-                done.complete("Remembered this spot as '" + place + "'.");
+                CompanionMemory.Location loc = new CompanionMemory.Location(c.getWorld().getRegistryKey().getValue().toString(), p.getX(), p.getY(), p.getZ());
+                if (in.has("type")) loc.type = in.get("type").getAsString();
+                if (in.has("note")) loc.note = in.get("note").getAsString();
+                brain.memory().places.put(place.toLowerCase(), loc);
+                brain.log("note", "Remembered " + place + " (" + loc.type + ") at " + p.toShortString(), false);
+                done.complete("Remembered this spot as '" + place + "' (" + loc.type + ").");
             }
             case "adjust_opinion" -> {
                 String player = string(in, "player");
@@ -274,7 +288,7 @@ public final class Actions {
                 BlockState state = state(string(in, "block"));
                 BlockPos pos = new BlockPos(integer(in, "x", 0), integer(in, "y", 0), integer(in, "z", 0));
                 if (c.count(state.getBlock().asItem()) < 1) throw new ActionError("Doesn't have any " + Ids.name(state.getBlock().asItem()) + ".");
-                c.startTask(new BuildTask(Ids.name(state.getBlock()), List.of(new BuildTask.Placement(pos, state))), done);
+                c.startTask(new BuildTask(Ids.name(state.getBlock()), "", List.of(new BuildTask.Placement(pos, state))), done);
             }
             case "build" -> {
                 List<BuildTask.Placement> placements = blueprint(c, in);
@@ -283,7 +297,8 @@ public final class Actions {
                     throw new ActionError("Not enough materials for " + placements.size() + " blocks. Missing: " + Recipes.describeMissing(c.serverWorld(), missing)
                             + ". Gather or craft them first (or build something smaller / with materials you have).");
                 }
-                c.startTask(new BuildTask(in.has("label") ? in.get("label").getAsString() : "a structure", placements), done);
+                c.startTask(new BuildTask(in.has("label") ? in.get("label").getAsString() : "a structure",
+                        in.has("purpose") ? in.get("purpose").getAsString() : "other", placements), done);
             }
             case "give_items" -> {
                 ServerPlayerEntity p = player(c, string(in, "player"));
@@ -313,7 +328,17 @@ public final class Actions {
             case "chest" -> {
                 boolean deposit = !"withdraw".equals(string(in, "action"));
                 Item item = in.has("item") && !in.get("item").getAsString().isBlank() ? item(in, "item") : null;
-                c.startTask(new ChestTask(deposit, item, integer(in, "count", 0)), done);
+                BlockPos at = in.has("x") && in.has("y") && in.has("z") ? new BlockPos(integer(in, "x", 0), integer(in, "y", 0), integer(in, "z", 0)) : null;
+                c.startTask(new ChestTask(deposit, item, integer(in, "count", 0), at, in.has("label") ? in.get("label").getAsString() : ""), done);
+            }
+            case "recall" -> done.complete(MemoryReport.recall(brain.memory(), c, in.has("query") ? in.get("query").getAsString() : ""));
+            case "allow_chest_access" -> {
+                String player = string(in, "player");
+                boolean allowed = !in.has("allowed") || in.get("allowed").getAsBoolean();
+                if (allowed) brain.memory().chestPermissions.add(player.toLowerCase());
+                else brain.memory().chestPermissions.remove(player.toLowerCase());
+                brain.log("note", player + (allowed ? " said you may use their chests" : " no longer lets you use their chests"), false);
+                done.complete("Noted.");
             }
             default -> throw new ActionError("Unknown action " + name);
         }

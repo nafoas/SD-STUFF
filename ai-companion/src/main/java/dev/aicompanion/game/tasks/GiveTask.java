@@ -26,6 +26,11 @@ public class GiveTask extends Task {
     }
 
     @Override
+    public boolean isMajor() {
+        return false;
+    }
+
+    @Override
     public String describe() {
         return "bringing " + count + " " + Ids.name(item) + " to " + name;
     }
