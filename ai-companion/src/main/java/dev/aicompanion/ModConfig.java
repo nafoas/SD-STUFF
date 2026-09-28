@@ -51,6 +51,10 @@ public class ModConfig {
     /** Companions only hear chat from players within this many blocks (0 = anywhere on the server). */
     public int hearingRadius = 0;
 
+    /** Seconds after dying before a companion comes back on its own (at its home, its owner, or spawn). 0 = only by command. */
+    public int autoRespawnSeconds = 15;
+    /** Log pathfinding plans and failures to the server log (for troubleshooting movement). */
+    public boolean debugPaths = false;
     /** Permission level needed for /companion spawn, dismiss and reinterview (0 = everyone, 2 = ops). */
     public int managePermissionLevel = 2;
     /**

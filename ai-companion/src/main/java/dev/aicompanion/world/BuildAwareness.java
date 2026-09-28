@@ -39,7 +39,7 @@ public final class BuildAwareness {
 
     private static final int MAX_TRACE = 1500;
     private static final int BUILD_SIZE = 20;
-    private static final long CACHE_MS = 30_000;
+    private static final long CACHE_MS = 10_000;
 
     private record Cached(Verdict verdict, long time) {}
 
@@ -204,7 +204,8 @@ public final class BuildAwareness {
         var accessor = world.getStructureAccessor();
         if (!accessor.hasStructureReferences(pos)) return false;
         for (Structure structure : accessor.getStructureReferences(pos).keySet()) {
-            StructureStart start = accessor.getStructureAt(pos, structure);
+            // Piece-accurate: inside an actual house/room/tunnel piece, not just the structure's big bounding box.
+            StructureStart start = accessor.getStructureContaining(pos, structure);
             if (start != null && start.hasChildren()) return true;
         }
         return false;

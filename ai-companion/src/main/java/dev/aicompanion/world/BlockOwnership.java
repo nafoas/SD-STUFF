@@ -4,6 +4,7 @@ import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtList;
 import net.minecraft.nbt.NbtString;
+import net.minecraft.registry.Registries;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.PersistentState;
@@ -23,6 +24,9 @@ public class BlockOwnership extends PersistentState {
     public static final String COMPANION_PREFIX = "companion:";
 
     private final Long2IntOpenHashMap owners = new Long2IntOpenHashMap();
+    /** Which block was placed, so a record is ignored once something else is there (explosions, /fill, pistons...). */
+    private final Long2IntOpenHashMap placedBlock = new Long2IntOpenHashMap();
+    @Nullable private transient ServerWorld world;
     private final List<String> names = new ArrayList<>();
     private final Map<String, Integer> nameIndex = new HashMap<>();
 
@@ -31,7 +35,9 @@ public class BlockOwnership extends PersistentState {
     }
 
     public static BlockOwnership get(ServerWorld world) {
-        return world.getPersistentStateManager().getOrCreate(BlockOwnership::fromNbt, BlockOwnership::new, ID);
+        BlockOwnership state = world.getPersistentStateManager().getOrCreate(BlockOwnership::fromNbt, BlockOwnership::new, ID);
+        state.world = world;
+        return state;
     }
 
     public static String companionOwner(String characterId) {
@@ -46,17 +52,28 @@ public class BlockOwnership extends PersistentState {
             nameIndex.put(owner, idx);
         }
         owners.put(pos.asLong(), (int) idx);
+        if (world != null) placedBlock.put(pos.asLong(), Registries.BLOCK.getRawId(world.getBlockState(pos).getBlock()));
         markDirty();
     }
 
     public synchronized void clear(BlockPos pos) {
+        placedBlock.remove(pos.asLong());
         if (owners.remove(pos.asLong()) != -1) markDirty();
     }
 
     @Nullable
     public synchronized String owner(BlockPos pos) {
         int idx = owners.get(pos.asLong());
-        return idx < 0 ? null : names.get(idx);
+        if (idx < 0) return null;
+        if (world != null && placedBlock.containsKey(pos.asLong())
+                && placedBlock.get(pos.asLong()) != Registries.BLOCK.getRawId(world.getBlockState(pos).getBlock())) {
+            // Something else is there now: the record is stale.
+            owners.remove(pos.asLong());
+            placedBlock.remove(pos.asLong());
+            markDirty();
+            return null;
+        }
+        return names.get(idx);
     }
 
     public boolean isPlayerPlaced(BlockPos pos) {
@@ -68,8 +85,8 @@ public class BlockOwnership extends PersistentState {
     public synchronized int playerPlacedNear(BlockPos pos, int radius) {
         int n = 0;
         for (BlockPos p : BlockPos.iterate(pos.add(-radius, -radius, -radius), pos.add(radius, radius, radius))) {
-            int idx = owners.get(p.asLong());
-            if (idx >= 0 && !names.get(idx).startsWith(COMPANION_PREFIX)) n++;
+            String o = owner(p);
+            if (o != null && !o.startsWith(COMPANION_PREFIX)) n++;
         }
         return n;
     }
@@ -89,6 +106,9 @@ public class BlockOwnership extends PersistentState {
         nbt.put("Names", nameList);
         nbt.putLongArray("Positions", positions);
         nbt.putIntArray("Owners", indexes);
+        int[] blocks = new int[positions.length];
+        for (int j = 0; j < positions.length; j++) blocks[j] = placedBlock.containsKey(positions[j]) ? placedBlock.get(positions[j]) : -1;
+        nbt.putIntArray("Blocks", blocks);
         return nbt;
     }
 
@@ -101,7 +121,11 @@ public class BlockOwnership extends PersistentState {
         }
         long[] positions = nbt.getLongArray("Positions");
         int[] indexes = nbt.getIntArray("Owners");
-        for (int i = 0; i < Math.min(positions.length, indexes.length); i++) state.owners.put(positions[i], indexes[i]);
+        int[] blocks = nbt.getIntArray("Blocks");
+        for (int i = 0; i < Math.min(positions.length, indexes.length); i++) {
+            state.owners.put(positions[i], indexes[i]);
+            if (i < blocks.length && blocks[i] >= 0) state.placedBlock.put(positions[i], blocks[i]);
+        }
         return state;
     }
 }

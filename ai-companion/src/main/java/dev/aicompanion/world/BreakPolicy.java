@@ -54,6 +54,8 @@ public final class BreakPolicy {
             return null; // naturally generated structure nobody has moved into
         }
         if (isValuable(state, world, pos)) return "it's someone's " + describe(state);
+        // Trapped with no way out: one ordinary block may go (the pathfinder puts it back afterwards).
+        if (purpose == Purpose.ESCAPE) return null;
         if (build.protectedFrom(self)) {
             String whose = build.owner() == null ? "someone's" : displayOwner(build.owner()) + "'s";
             return build.kind() == BuildAwareness.Kind.HOME ? "it's part of " + whose + " home" : "it's part of " + whose + " build";

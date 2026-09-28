@@ -60,6 +60,7 @@ public final class Goals {
                 case "have_item" -> "have " + count + " " + String.join(" or ", items);
                 case "gather_item" -> "gather " + count + " more " + String.join(" or ", items);
                 case "have_place" -> "have a " + target;
+                case "recover" -> "picked up (or they vanished)";
                 case "built" -> "built a " + target;
                 default -> type;
             };
@@ -209,6 +210,16 @@ public final class Goals {
                     return total - cond.baseline >= Math.max(1, cond.count);
                 }
                 return total >= Math.max(1, cond.count);
+            }
+            case "recover" -> {
+                // "dim|x|y|z|time": done once the items are picked up, or gone (they vanish after 5 minutes).
+                String[] parts = cond.target.split("\\|");
+                long time = Long.parseLong(parts[4]);
+                if (System.currentTimeMillis() - time > 5 * 60_000 + 30_000) return true;
+                if (!c.getWorld().getRegistryKey().getValue().toString().equals(parts[0])) return false;
+                net.minecraft.util.math.BlockPos pos = new net.minecraft.util.math.BlockPos(Integer.parseInt(parts[1]), Integer.parseInt(parts[2]), Integer.parseInt(parts[3]));
+                if (c.getBlockPos().getSquaredDistance(pos) > 6 * 6) return false;
+                return c.getWorld().getEntitiesByClass(net.minecraft.entity.ItemEntity.class, new net.minecraft.util.math.Box(pos).expand(6), e -> true).isEmpty();
             }
             case "have_place" -> {
                 String t = cond.target.toLowerCase(Locale.ROOT);

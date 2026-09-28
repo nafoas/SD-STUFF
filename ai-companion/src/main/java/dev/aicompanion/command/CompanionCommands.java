@@ -83,6 +83,26 @@ public final class CompanionCommands {
                     brain.toggleDebug();
                     ctx.getSource().sendFeedback(() -> Text.literal("Toggled debug messages for " + brain.name() + " (shown to their owner)."), false);
                 }))));
+        root.then(literal("checkblock").requires(src -> src.hasPermissionLevel(2))
+                .then(argument("pos", net.minecraft.command.argument.BlockPosArgumentType.blockPos()).executes(ctx -> {
+                    var pos = net.minecraft.command.argument.BlockPosArgumentType.getLoadedBlockPos(ctx, "pos");
+                    var world = ctx.getSource().getWorld();
+                    var verdict = dev.aicompanion.world.BuildAwareness.classify(world, pos);
+                    String owner = dev.aicompanion.world.BlockOwnership.get(world).owner(pos);
+                    StringBuilder sb = new StringBuilder(world.getBlockState(pos).getBlock().getName().getString() + " at " + pos.toShortString()
+                            + ": placed by " + (owner == null ? "nobody (natural or older than the mod)" : owner)
+                            + ", part of " + verdict.kind().name().toLowerCase() + " (" + verdict.size() + " blocks"
+                            + (verdict.owner() == null ? "" : ", mostly " + verdict.owner()) + ")"
+                            + (dev.aicompanion.world.BuildAwareness.inGeneratedStructure(world, pos) ? ", inside a generated structure" : ""));
+                    for (CompanionBrain brain : CompanionManager.brains()) {
+                        CompanionEntity e = brain.entity();
+                        if (e == null || e.getWorld() != world) continue;
+                        String why = dev.aicompanion.world.BreakPolicy.check(e, pos, dev.aicompanion.world.BreakPolicy.Purpose.GATHER);
+                        sb.append("\n ").append(brain.name()).append(why == null ? ": may break it" : ": won't break it (" + why + ")");
+                    }
+                    ctx.getSource().sendFeedback(() -> Text.literal(sb.toString()), false);
+                    return 1;
+                })));
         root.then(literal("reload").requires(src -> src.hasPermissionLevel(2)).executes(ctx -> {
             ModConfig.load();
             ctx.getSource().sendFeedback(() -> Text.literal("Reloaded config/ai-companion.json."), true);

@@ -103,6 +103,12 @@ public class CompanionEntity extends PathAwareEntity {
         }
     }
 
+    /** Which monsters hunt companions like players (not endermen or piglins, which are only provoked). */
+    public static boolean huntsCompanions(HostileEntity mob) {
+        return !(mob instanceof net.minecraft.entity.mob.EndermanEntity) && !(mob instanceof net.minecraft.entity.mob.ZombifiedPiglinEntity)
+                && !(mob instanceof net.minecraft.entity.mob.PiglinEntity) && !(mob instanceof net.minecraft.entity.mob.PiglinBruteEntity);
+    }
+
     public static DefaultAttributeContainer.Builder createAttributes() {
         return MobEntity.createMobAttributes()
                 .add(EntityAttributes.GENERIC_MAX_HEALTH, 20.0)
@@ -159,6 +165,16 @@ public class CompanionEntity extends PathAwareEntity {
     public void setOwner(PlayerEntity player) {
         ownerUuid = player.getUuid();
         ownerName = player.getGameProfile().getName();
+    }
+
+    public void setOwner(UUID uuid, String name) {
+        ownerUuid = uuid;
+        ownerName = name;
+    }
+
+    @Nullable
+    public UUID getOwnerUuid() {
+        return ownerUuid;
     }
 
     @Nullable
@@ -241,6 +257,7 @@ public class CompanionEntity extends PathAwareEntity {
         if (age % 80 == 0 && getHealth() < getMaxHealth()) heal(1.0f);
         if (attackCooldown > 0) attackCooldown--;
 
+        if (age % 5 == 0) useShield();
         if (runReflexes()) return;
 
         if (task != null) {
@@ -303,6 +320,25 @@ public class CompanionEntity extends PathAwareEntity {
                 return true;
             }
         }
+        // Monsters coming for us, before they land a hit.
+        List<HostileEntity> hunters = getWorld().getEntitiesByClass(HostileEntity.class, getBoundingBox().expand(16), h -> h.isAlive() && h.getTarget() == this);
+        if (hunters.size() >= 3 && p.bravery() < 8) {
+            log("combat", "Outnumbered by " + hunters.size() + " monsters, falling back", false);
+            fleeToSafety(hunters.get(0).getPos());
+            return true;
+        }
+        for (HostileEntity h : hunters) {
+            if (h instanceof net.minecraft.entity.ai.RangedAttackMob && squaredDistanceTo(h) > 5 * 5 && combatTarget == null) {
+                if (p.bravery() >= 5) combatTarget = h; // rush the archer
+                else {
+                    fleeToSafety(h.getPos()); // get out of its sight
+                    return true;
+                }
+            }
+        }
+        if (combatTarget == null && !hunters.isEmpty() && p.bravery() >= 3) {
+            combatTarget = hunters.stream().min(Comparator.comparingDouble(this::squaredDistanceTo)).orElse(null);
+        }
         if (combatTarget == null && p.defendsFriends()) {
             combatTarget = nearest(HostileEntity.class, 12, h -> h.getTarget() instanceof PlayerEntity pl && opinionOf(pl.getName().getString()) >= 0);
         }
@@ -351,6 +387,37 @@ public class CompanionEntity extends PathAwareEntity {
             tryAttack(target);
             attackCooldown = 12;
         }
+    }
+
+    /** Falls back toward its owner if they're around (safety in numbers), otherwise just away from the danger. */
+    public void fleeToSafety(Vec3d from) {
+        ServerPlayerEntity owner = getOwnerPlayer();
+        if (owner != null && owner.getWorld() == getWorld() && squaredDistanceTo(owner) < 40 * 40 && owner.squaredDistanceTo(from) > 6 * 6) {
+            if (fleeTicks <= 0) log("combat", "Ran to " + owner.getName().getString() + " for safety", false);
+            fleeTarget = owner.getPos();
+            fleeTicks = 60;
+            combatTarget = null;
+            getNavigation().startMovingTo(owner, 1.3);
+            return;
+        }
+        flee(from);
+    }
+
+    /** Raises a shield against arrows and creepers when it has one in the off hand. */
+    private void useShield() {
+        if (!getOffHandStack().isOf(net.minecraft.item.Items.SHIELD)) {
+            for (int i = 0; i < inventory.size(); i++) {
+                if (inventory.getStack(i).isOf(net.minecraft.item.Items.SHIELD) && getOffHandStack().isEmpty()) {
+                    equipStack(EquipmentSlot.OFFHAND, inventory.removeStack(i));
+                    break;
+                }
+            }
+            return;
+        }
+        boolean danger = nearest(HostileEntity.class, 16, h -> h.getTarget() == this && h instanceof net.minecraft.entity.ai.RangedAttackMob && squaredDistanceTo(h) > 9) != null
+                || nearest(CreeperEntity.class, 4, cr -> cr.getFuseSpeed() > 0) != null;
+        if (danger && !isBlocking() && attackCooldown > 2) setCurrentHand(Hand.OFF_HAND);
+        else if ((!danger || attackCooldown <= 0) && isUsingItem()) clearActiveItem();
     }
 
     public void flee(Vec3d from) {
@@ -494,6 +561,49 @@ public class CompanionEntity extends PathAwareEntity {
                 return;
             }
         }
+    }
+
+    /** The best tool it carries for a block, without switching to it. */
+    public ItemStack bestToolFor(BlockState state) {
+        ItemStack best = getMainHandStack();
+        float bestSpeed = best.getMiningSpeedMultiplier(state) + (canHarvestWith(best, state) ? 100 : 0);
+        for (int i = 0; i < inventory.size(); i++) {
+            ItemStack s = inventory.getStack(i);
+            if (s.isEmpty()) continue;
+            float speed = s.getMiningSpeedMultiplier(state) + (canHarvestWith(s, state) ? 100 : 0);
+            if (speed > bestSpeed) {
+                best = s;
+                bestSpeed = speed;
+            }
+        }
+        return best;
+    }
+
+    /** Throwaway blocks it's happy to pillar and bridge with. */
+    private static final java.util.Set<Item> FILLER = java.util.Set.of(net.minecraft.item.Items.DIRT, net.minecraft.item.Items.COBBLESTONE,
+            net.minecraft.item.Items.COBBLED_DEEPSLATE, net.minecraft.item.Items.NETHERRACK, net.minecraft.item.Items.ANDESITE,
+            net.minecraft.item.Items.DIORITE, net.minecraft.item.Items.GRANITE, net.minecraft.item.Items.TUFF, net.minecraft.item.Items.STONE,
+            net.minecraft.item.Items.BLACKSTONE, net.minecraft.item.Items.COARSE_DIRT, net.minecraft.item.Items.END_STONE);
+
+    public int fillerCount() {
+        int n = 0;
+        for (Item item : FILLER) n += count(item);
+        return n;
+    }
+
+    /** Places one throwaway block (the one it has most of). */
+    public boolean placeFiller(BlockPos pos) {
+        Item best = null;
+        int bestCount = 0;
+        for (Item item : FILLER) {
+            int n = count(item);
+            if (n > bestCount) {
+                best = item;
+                bestCount = n;
+            }
+        }
+        if (best == null || !(best instanceof net.minecraft.item.BlockItem blockItem)) return false;
+        return placeBlock(pos, blockItem.getBlock().getDefaultState());
     }
 
     public void equipBestToolFor(BlockState state) {
@@ -680,11 +790,27 @@ public class CompanionEntity extends PathAwareEntity {
 
     @Override
     public void onDeath(DamageSource source) {
+        // Note what it was carrying before it all spills out.
+        java.util.Map<Item, Integer> carried = new java.util.LinkedHashMap<>();
+        if (!getWorld().isClient) {
+            for (int i = 0; i < inventory.size(); i++) {
+                ItemStack st = inventory.getStack(i);
+                if (!st.isEmpty()) carried.merge(st.getItem(), st.getCount(), Integer::sum);
+            }
+            for (EquipmentSlot slot : EquipmentSlot.values()) {
+                ItemStack st = getEquippedStack(slot);
+                if (!st.isEmpty()) carried.merge(st.getItem(), st.getCount(), Integer::sum);
+            }
+        }
         super.onDeath(source);
         if (getWorld().isClient) return;
         cancelTask("died");
         CompanionBrain brain = brain();
-        if (brain != null) brain.onDeath(source.getDeathMessage(this).getString());
+        if (brain != null) {
+            java.util.List<String> lost = new java.util.ArrayList<>();
+            carried.forEach((item, n) -> lost.add(n + " " + dev.aicompanion.game.Ids.name(item)));
+            brain.onDeath(source.getDeathMessage(this).getString(), getWorld().getRegistryKey().getValue().toString(), getBlockPos(), lost);
+        }
     }
 
     @Override

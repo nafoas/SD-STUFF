@@ -99,6 +99,7 @@ Companions look at the blocks around them the way a player would. There's nothin
 | `/companion log <name>` | Its recent activity log |
 | `/companion memory <name>` | Places, chests and resources it remembers |
 | `/companion reinterview <name>` | Rebuild the profile from a fresh self-description |
+| `/companion checkblock <x y z>` | Why companions would or wouldn't break a block (who placed it, whose build it's part of) |
 | `/companion debug <name>` | Show its decisions and actions to its owner in chat |
 | `/companion reload` | Reload the config |
 
@@ -120,12 +121,26 @@ Profiles are saved in `config/ai-companion/profiles/<id>.json`, and you can edit
 | `hearingRadius` | 0 | If above 0, companions only hear chat within this many blocks |
 | `managePermissionLevel` | 2 | Permission level needed for spawn, dismiss, reinterview and debug |
 | `mischief` | `never` | How far a mean character may go against players. `never`: no tricks that hurt anyone. `pranks`: harmless tricks and fibs. `mean`: may lure mobs toward players, take from their chests, and sabotage small things. Homes and builds are never broken at any level. |
+| `autoRespawnSeconds` | 15 | Seconds before a dead companion comes back on its own. 0 means only by command. |
+| `debugPaths` | false | Log pathfinding plans and failures to the server log |
 | `allowPvp` | false | Let companions attack players when their character decides to |
 | `searchRadius` | 32 | How far they look for blocks to mine |
 | `skins` | `{}` | `{"Grug": "Notch"}` uses a Minecraft username's skin, or give a direct 64x64 PNG URL |
 | `slimArms` | `{}` | `{"Ada": true}` for the slim (Alex) model when using a PNG URL |
 
 **Costs.** Each decision is one AICord call plus one or more Claude calls if it acts. Check-ins, chatter and joining in on chat each cost one AICord call. Raise `checkInMinutes` and `chatterMinutes`, or turn off `overhearChat`, to spend less.
+
+## Getting around, fighting, dying
+
+- **Pathfinding.** For ordinary walks they use the game's own pathing. When that can't get there, their own pathfinder takes over. It can:
+  - break what's in the way (only blocks the build rules allow)
+  - pillar up and bridge gaps with throwaway blocks from the bag (dirt, cobblestone...)
+  - climb ladders and vines, swim, and open wooden doors
+  - drop down safely, and avoid lava, fire and cactus
+- **Getting unstuck.** If one is really trapped, even inside someone's sealed house, it breaks a single ordinary block to get out, then puts it back exactly as it was.
+- **Monsters** target companions the way they target players (not endermen or piglins, which only fight back).
+- **Threat awareness.** Companions notice monsters coming for them before they're hit. When outnumbered, the less brave ones fall back to their owner. Brave ones rush archers, and cautious ones get out of their line of sight. They raise a shield if they carry one.
+- **Dying.** A companion comes back on its own after a short wait: at its home if it has one, otherwise next to its owner. Getting its things back becomes a goal, urgent for brave characters and less so for timid ones. It walks back and picks them up before they vanish, about 5 minutes after death.
 
 ## What companions can do
 
@@ -140,9 +155,8 @@ Profiles are saved in `config/ai-companion/profiles/<id>.json`, and you can edit
 ## Limitations
 
 - Everyone on the server needs the mod, because the companion is a custom entity.
-- Companions walk with Minecraft's normal mob pathfinding. They can't sprint-jump, pillar up or do parkour, so tall builds must be reachable from their own floors.
+- Companions can't sprint-jump or do parkour. Pillaring and bridging need throwaway blocks in their bag.
 - Crafting and smelting happen in the companion's bag. It stands at the table or furnace, but no GUI is shown.
-- Hostile mobs don't go after companions on their own the way they target players. Companions still fight back and defend people.
 - AICord's docs don't say which format the `Authorization` header takes, so the mod tries `Bearer <key>` first and then the plain key.
 - The jar is about 34 MB because it bundles the official Claude Java SDK.
 

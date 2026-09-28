@@ -128,7 +128,10 @@ public final class ClaudeActionLayer {
                 redstone and diamonds from y -64 to -16 (best near y -58). Use dig with mode "down" to get underground, then "forward" to tunnel along.
                 - collect_blocks only mines exposed blocks it can walk to. Dig to buried ores first.
                 - Torches: coal + stick. Beds: 3 wool (from sheep) + 3 planks. Food comes from animals (cow, pig, chicken, sheep); smelt raw meat.
-                - Night is dangerous. The body can't sprint-jump or pillar up, so builds taller than about 5 blocks must be reachable from its own floors or stairs.
+                - After dying, the things you carried lie where you died for about 5 minutes: go_to those coordinates and pick_up_items.
+                - Getting around: the body breaks through, pillars up and bridges gaps with throwaway blocks (dirt, cobblestone...) \
+                if it carries some, climbs ladders and swims. Keep a stack of cobblestone or dirt for that.
+                - Night is dangerous. It can pillar up to reach high spots, but prefers stairs and floors.
 
                 Building well:
                 - Plan the whole structure, check materials with get_status, gather or craft what is missing, then build. Use build with boxes: \

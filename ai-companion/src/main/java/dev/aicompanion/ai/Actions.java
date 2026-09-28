@@ -123,6 +123,8 @@ public final class Actions {
         specs.add(new Spec("adjust_opinion", "Record that the character's feelings about a player changed, when the character's reply clearly shows it.",
                 Map.of("player", str("Player name"), "change", num("-3 to 3"), "reason", str("Why")), List.of("player", "change")));
         specs.add(new Spec("stop", "Stop the current activity and stand still.", Map.of(), List.of()));
+        specs.add(new Spec("pick_up_items", "Walk over and pick up dropped items nearby (your things after dying, drops after a fight).",
+                Map.of("radius", num("How far to look, default 8")), List.of()));
         specs.add(new Spec("add_goal", "Add a goal to the character's goal tree. Use a blocking sub-goal (blocker=true with the parent's id) when something "
                 + "must happen first, e.g. the pickaxe broke while mining: 'get a new pickaxe' blocks 'mine the mountain', which resumes afterwards. "
                 + "Add a checkable condition when possible so it counts as done however it happens (even if someone gives the item).",
@@ -391,6 +393,7 @@ public final class Actions {
                 brain.saveLater();
                 done.complete(dropped ? "Dropped." : "Marked done.");
             }
+            case "pick_up_items" -> c.startTask(new dev.aicompanion.game.tasks.PickUpItemsTask(integer(in, "radius", 8)), done);
             case "recall" -> done.complete(MemoryReport.recall(brain.memory(), c, in.has("query") ? in.get("query").getAsString() : ""));
             case "allow_chest_access" -> {
                 String player = string(in, "player");

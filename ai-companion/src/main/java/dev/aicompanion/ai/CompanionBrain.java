@@ -68,6 +68,7 @@ public class CompanionBrain {
     @Nullable private volatile String lastGoalId;
     private volatile long nextPursuit;
     private volatile long freeTimeUntil;
+    private volatile long respawnAt;
 
     public CompanionBrain(String characterId, String name) {
         this.characterId = characterId;
@@ -166,11 +167,46 @@ public class CompanionBrain {
         if (allow("gift:" + player, 15000)) stimulate(new Stimulus("gift", player + " gave you " + what + ".", player, 0));
     }
 
-    public void onDeath(String deathMessage) {
+    public void onDeath(String deathMessage, String dimension, net.minecraft.util.math.BlockPos pos, List<String> lost) {
         planGeneration.incrementAndGet();
+        CompanionMemory.Death d = new CompanionMemory.Death();
+        d.dimension = dimension;
+        d.x = pos.getX();
+        d.y = pos.getY();
+        d.z = pos.getZ();
+        d.time = System.currentTimeMillis();
+        d.cause = deathMessage;
+        d.items = new java.util.ArrayList<>(lost);
+        memory.lastDeath = d;
         memory.addEvent("You died: " + deathMessage + ". You dropped everything you carried.");
-        log("death", deathMessage + " (dropped everything)", true);
+        log("death", deathMessage + " at " + pos.toShortString() + (lost.isEmpty() ? "" : ", dropped " + String.join(", ", lost)), true);
         CompanionManager.broadcast(Text.literal(deathMessage).formatted(Formatting.GRAY));
+        int delay = ModConfig.get().autoRespawnSeconds;
+        respawnAt = delay > 0 ? System.currentTimeMillis() + delay * 1000L : 0;
+    }
+
+    public long respawnAt() {
+        return respawnAt;
+    }
+
+    /** Back in the world after dying: getting its things back becomes a goal (how urgent depends on how brave it is). */
+    public void onRespawned() {
+        respawnAt = 0;
+        CompanionMemory.Death d = memory.lastDeath;
+        if (d == null || d.items.isEmpty()) return;
+        long left = 5 * 60_000 - (System.currentTimeMillis() - d.time);
+        if (left <= 0) return;
+        Goals.Condition cond = new Goals.Condition();
+        cond.type = "recover";
+        cond.target = d.dimension + "|" + d.x + "|" + d.y + "|" + d.z + "|" + d.time;
+        int importance = profile.bravery() >= 4 ? 9 : 5;
+        Goals.Goal g = Goals.add(memory, "get my things back from where I died (" + d.x + ", " + d.y + ", " + d.z + ") before they vanish", "short",
+                importance, null, "self", cond);
+        g.progress = "Dropped " + String.join(", ", d.items) + ". Items vanish about 5 minutes after dying (" + (left / 60_000 + 1) + " min left).";
+        lastGoalId = g.id;
+        nextPursuit = 0;
+        freeTimeUntil = 0;
+        log("need", "Back after dying; your things are still at " + d.x + ", " + d.y + ", " + d.z + " (" + d.cause + ")", false);
     }
 
     /** Something happened to the body worth telling the mind about (e.g. a follow ended). */
@@ -226,7 +262,8 @@ public class CompanionBrain {
         checkGoals(); // don't start another step on something that's already achieved
         Goals.Choice choice = Goals.choose(memory, profile, lastGoalId);
         // Free time is real time off, but a promise or something blocking one cuts it short.
-        boolean pressing = choice.goal() != null && (!choice.goal().from.equals("self") || choice.goal().blocker && choice.score() >= 15);
+        boolean pressing = choice.goal() != null && (!choice.goal().from.equals("self") || choice.goal().blocker && choice.score() >= 15
+                || choice.goal().condition != null && "recover".equals(choice.goal().condition.type)); // things vanish if it waits
         if (now < freeTimeUntil && !pressing) return;
         if (choice.isFreeTime()) {
             long minutes = memory.dayPlan.kind.equals("free") ? 10 : 3 + (long) (Math.random() * 3);

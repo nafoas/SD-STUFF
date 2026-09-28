@@ -128,6 +128,20 @@ public class CompanionMemory {
     }
 
     public DayPlan dayPlan = new DayPlan();
+
+    /** Who brought it into the world (to respawn it next to them and keep ownership). */
+    public String ownerUuid = "";
+    public String ownerName = "";
+
+    public static class Death {
+        public String dimension;
+        public int x, y, z;
+        public long time;
+        public String cause = "";
+        public List<String> items = new ArrayList<>();
+    }
+
+    @org.jetbrains.annotations.Nullable public Death lastDeath;
     /** Players (lowercase) who said the companion may take things from their chests. */
     public Set<String> chestPermissions = ConcurrentHashMap.newKeySet();
 

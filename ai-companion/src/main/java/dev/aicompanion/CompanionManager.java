@@ -69,6 +69,10 @@ public final class CompanionManager {
             return;
         }
         brain.attach(e);
+        if (brain.memory().ownerUuid.isEmpty() && e.getOwnerUuid() != null) {
+            brain.memory().ownerUuid = e.getOwnerUuid().toString();
+            brain.memory().ownerName = e.getOwnerName();
+        }
     }
 
     public static void onEntityUnloaded(CompanionEntity e) {
@@ -131,6 +135,8 @@ public final class CompanionManager {
                 e.initialize(world, world.getLocalDifficulty(e.getBlockPos()), SpawnReason.COMMAND, null, null);
                 world.spawnEntity(e);
                 brain.attach(e);
+                brain.memory().ownerUuid = player.getUuidAsString();
+                brain.memory().ownerName = player.getName().getString();
                 NEARBY.put(brain.id(), new java.util.HashSet<>(List.of(player.getName().getString())));
                 boolean returning = !brain.memory().events.isEmpty();
                 String owner = player.getName().getString();
@@ -144,6 +150,53 @@ public final class CompanionManager {
                 }
             });
         });
+    }
+
+    /** Brings a dead companion back: at its home if it has one, else next to its owner, else at world spawn. */
+    public static void respawn(CompanionBrain brain) {
+        MinecraftServer srv = server;
+        if (srv == null || brain.entity() != null) return;
+        var memory = brain.memory();
+        ServerWorld world = srv.getOverworld();
+        net.minecraft.util.math.BlockPos pos = null;
+        String where = "spawn";
+        for (var place : memory.places.values()) {
+            if (!place.type.equals("home")) continue;
+            ServerWorld w = worldFor(srv, place.dimension);
+            if (w != null && place.y != dev.aicompanion.ai.CompanionMemory.UNKNOWN_Y) {
+                world = w;
+                pos = new net.minecraft.util.math.BlockPos(place.x, place.y, place.z);
+                where = "home";
+                break;
+            }
+        }
+        ServerPlayerEntity owner = memory.ownerUuid.isEmpty() ? null : srv.getPlayerManager().getPlayer(java.util.UUID.fromString(memory.ownerUuid));
+        if (pos == null && owner != null) {
+            world = owner.getServerWorld();
+            pos = owner.getBlockPos();
+            where = owner.getName().getString();
+        }
+        if (pos == null) pos = world.getSpawnPos();
+        world.getChunk(pos); // make sure it's loaded
+        pos = world.getTopPosition(net.minecraft.world.Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, pos).getY() > pos.getY() + 3 && !world.getBlockState(pos).isAir()
+                ? world.getTopPosition(net.minecraft.world.Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, pos) : pos;
+        CompanionEntity e = AiCompanionMod.COMPANION.create(world);
+        if (e == null) return;
+        e.refreshPositionAndAngles(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, 0, 0);
+        e.setCharacter(brain.id(), brain.name());
+        if (owner != null) e.setOwner(owner);
+        else if (!memory.ownerUuid.isEmpty()) e.setOwner(java.util.UUID.fromString(memory.ownerUuid), memory.ownerName);
+        e.initialize(world, world.getLocalDifficulty(pos), SpawnReason.TRIGGERED, null, null);
+        world.spawnEntity(e);
+        brain.attach(e);
+        broadcast(Text.literal(brain.name() + " is back (respawned at " + where + ").").formatted(Formatting.GRAY));
+        brain.onRespawned();
+    }
+
+    @Nullable
+    private static ServerWorld worldFor(MinecraftServer srv, String dimension) {
+        for (ServerWorld w : srv.getWorlds()) if (w.getRegistryKey().getValue().toString().equals(dimension)) return w;
+        return null;
     }
 
     public static boolean dismiss(String name) {
@@ -337,6 +390,9 @@ public final class CompanionManager {
         tickCounter++;
         if (tickCounter % 40 == 0) {
             long now = System.currentTimeMillis();
+            for (CompanionBrain brain : BRAINS.values()) {
+                if (brain.entity() == null && brain.respawnAt() > 0 && now >= brain.respawnAt()) respawn(brain);
+            }
             for (CompanionBrain brain : BRAINS.values()) {
                 CompanionEntity e = brain.entity();
                 if (e == null || !e.isAlive()) continue;

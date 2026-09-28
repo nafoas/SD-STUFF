@@ -46,6 +46,11 @@ public class AiCompanionMod implements ModInitializer {
 
         ServerEntityEvents.ENTITY_LOAD.register((entity, world) -> {
             if (entity instanceof CompanionEntity c) CompanionManager.onEntityLoaded(c);
+            // Monsters go after companions the way they go after players.
+            if (entity instanceof net.minecraft.entity.mob.HostileEntity mob && CompanionEntity.huntsCompanions(mob)) {
+                ((dev.aicompanion.mixin.MobEntityAccessor) mob).aiCompanion$getTargetSelector()
+                        .add(2, new net.minecraft.entity.ai.goal.ActiveTargetGoal<>(mob, CompanionEntity.class, true));
+            }
         });
         ServerEntityEvents.ENTITY_UNLOAD.register((entity, world) -> {
             if (entity instanceof CompanionEntity c) CompanionManager.onEntityUnloaded(c);
