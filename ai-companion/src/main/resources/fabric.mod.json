@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "ai-companion",
+  "version": "${version}",
+  "name": "AI Companion",
+  "description": "AI companions driven by your AICord characters.",
+  "authors": ["nafoas"],
+  "environment": "*",
+  "entrypoints": {
+    "main": ["dev.aicompanion.AiCompanionMod"],
+    "client": ["dev.aicompanion.client.AiCompanionClient"]
+  },
+  "depends": {
+    "fabricloader": ">=0.15.0",
+    "minecraft": "~1.20.1",
+    "java": ">=17",
+    "fabric-api": "*"
+  }
+}

@@ -1,0 +1,120 @@
+# AI Companion (Fabric, Minecraft 1.20.1)
+
+Brings your **AICord characters** into Minecraft as companions with real bodies. They talk in chat, mine, craft, smelt, build, fight, trade items and wander off to do their own thing. **Each character's personality decides what it does**, not just how it talks.
+
+## How it works
+
+```
+Chat / game events ──► AICord character (its own personality + memory)
+                          │  says something out loud       → game chat
+                          │  decides what it will actually do ("INTENT: ...")
+                          ▼
+                       Claude (action layer)  ──► game tools: collect_blocks, dig, craft,
+                          carries out THAT decision,            smelt, build, give_items,
+                          in the character's style              attack, chest, follow ...
+                          ▼
+                       Companion body (runs every tick, no AI needed)
+                          reflexes: fight / flee / eat / pick up items / follow
+```
+
+The personality affects behavior at three levels:
+
+1. **Decisions.** Everything that happens to a companion goes to its AICord character first: being spoken to, a gift, getting hit, being bored, a task finishing. The character decides what to do, and that decision is final. It can refuse, bargain ("give me an apple first"), do a sloppy job, or ignore you and go exploring. Claude only carries out the decision, and its instructions say never to be more helpful than the character chose to be.
+2. **Style.** When a character first spawns, the mod asks it to describe itself. The answer becomes a behavior profile with bravery, diligence, generosity, curiosity, loyalty, sociability, perfectionism, favorite activities, dislikes and building style and palette. Claude gets this profile, so a lazy character gathers the minimum and builds a dirt hut, and a perfectionist builds a detailed cottage from its favorite blocks.
+3. **Reflexes.** The same profile drives the fast code directly:
+
+   | Trait | Effect |
+   |---|---|
+   | Bravery | Retreat threshold. 7+ hunts monsters on its own, low values flee from attackers. |
+   | Loyalty | 6+ follows its owner around when idle. |
+   | Diligence | How fast it moves while working. |
+   | Curiosity | How often and how far it wanders. |
+   | Sociability | Greets players who walk up. |
+   | Curiosity, diligence, sociability | Restless characters check in on their own more often. |
+   | Generosity | Whether it lets strangers look in its bag. |
+
+It also remembers how it feels about each player (hit it and it holds a grudge, give it gifts and it warms up), places you told it to remember, and recent events. All of this survives restarts.
+
+## Setup
+
+1. Install **Fabric Loader** and **Fabric API** for **Minecraft 1.20.1** on the server and on every player's client. The companion is a custom entity, so everyone who joins needs the mod.
+2. Put `ai-companion-<version>.jar` in the `mods` folder of the server and of each client.
+3. Start the server once. It creates `config/ai-companion.json`. Fill in:
+   ```json
+   {
+     "aicordApiKey": "your AICord API key (AICord dashboard -> settings)",
+     "claudeApiKey": "your Claude API key (console.anthropic.com)"
+   }
+   ```
+   Then run `/companion reload` or restart. Only the server needs the keys; clients never see them.
+4. In game, run `/companion characters`, then `/companion spawn <name>`.
+
+### Talking to companions
+
+- Mention a companion's name in chat, for example `Grug, can you get me some wood?`
+- If you talked to a companion in the last minute and are standing near it, you can keep talking without repeating its name.
+- Right-click a companion to open its bag, if it likes you enough. Throw items at it to give it gifts.
+- Companions hear each other when one says another's name. There's a limit on back-and-forth so they don't chat forever.
+
+### Commands
+
+| Command | What it does |
+|---|---|
+| `/companion characters` | List the characters on your AICord account |
+| `/companion spawn <name>` | Bring a character into the world, or summon it back to you |
+| `/companion dismiss <name>` | Remove it from the world. Its memories are kept. |
+| `/companion list` | Where each companion is and what it's doing |
+| `/companion stop <name>` | Make it stop its current activity |
+| `/companion profile <name>` | Show its behavior profile |
+| `/companion reinterview <name>` | Rebuild the profile from a fresh self-description |
+| `/companion debug <name>` | Show its decisions and actions to its owner in chat |
+| `/companion reload` | Reload the config |
+
+Profiles are saved in `config/ai-companion/profiles/<id>.json`, and you can edit them by hand. Memories are saved in `config/ai-companion/memory/<id>.json`.
+
+## Config options
+
+| Option | Default | Meaning |
+|---|---|---|
+| `claudeModel` | `claude-opus-5` | Model for the action layer |
+| `claudeEffort` | `low` | `low`, `medium` or `high`. Lower is faster and cheaper. |
+| `maxActionsPerDecision` | 16 | Cap on tool calls per decision |
+| `idleThinkSeconds` | 150 | How often idle companions decide something on their own. 0 turns this off. |
+| `reactToResults` | true | Let the character comment on how a task went and pick a follow-up |
+| `conversationRadius` | 10 | Distance within which you can keep talking without the name |
+| `hearingRadius` | 0 | If above 0, companions only hear chat within this many blocks |
+| `managePermissionLevel` | 2 | Permission level needed for spawn, dismiss, reinterview and debug |
+| `allowPvp` | false | Let companions attack players when their character decides to |
+| `searchRadius` | 32 | How far they look for blocks to mine |
+| `skins` | `{}` | `{"Grug": "Notch"}` uses a Minecraft username's skin, or give a direct 64x64 PNG URL |
+| `slimArms` | `{}` | `{"Ada": true}` for the slim (Alex) model when using a PNG URL |
+
+**Costs.** Each decision is one AICord call plus one or more Claude calls. Idle check-ins and reactions add more. Raise `idleThinkSeconds`, or set it to 0, and turn off `reactToResults` to spend less.
+
+## What companions can do
+
+- **Gather:** mine exposed blocks with the right tool, using real break times. Ore names match deepslate variants too.
+- **Dig:** level tunnels, and staircases down or up to reach ores. Stops before breaking into lava or water.
+- **Craft:** full recipe chains from the game's own recipe data, for example logs → planks → sticks → pickaxe. Places a crafting table when a recipe needs one. Reports exactly what's missing.
+- **Smelt:** uses a nearby furnace, or places one, and burns fuel from the bag. Uses vanilla timing.
+- **Build:** blueprints made of boxes and single blocks, with block states such as stairs facing a direction. Checks materials first. Clears grass, dirt and stone in the way but nothing else. Never places a block inside a creature.
+- **Everything else:** give items to players (thrown if it can't walk up to them), fight, store or take items from chests, follow, stay and guard, remember places.
+- **Reflexes:** eat when hurt, run from creepers, fight or flee depending on bravery, defend players they like, wear the best armor they carry, pick up items.
+
+## Limitations
+
+- Everyone on the server needs the mod, because the companion is a custom entity.
+- Companions walk with Minecraft's normal mob pathfinding. They can't sprint-jump, pillar up or do parkour, so tall builds must be reachable from their own floors.
+- Crafting and smelting happen in the companion's bag. It stands at the table or furnace, but no GUI is shown.
+- Hostile mobs don't go after companions on their own the way they target players. Companions still fight back and defend people.
+- AICord's docs don't say which format the `Authorization` header takes, so the mod tries `Bearer <key>` first and then the plain key.
+- The jar is about 34 MB because it bundles the official Claude Java SDK.
+
+## Building from source
+
+```
+./gradlew build        # jar ends up in build/libs/
+./gradlew runServer    # dev server in ./run
+./gradlew runClient    # dev client
+```
+Requires JDK 17 or newer.
