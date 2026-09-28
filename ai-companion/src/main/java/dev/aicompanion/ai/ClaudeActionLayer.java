@@ -152,6 +152,7 @@ public final class ClaudeActionLayer {
     public static Outcome carryOut(CompanionBrain brain, String event, String spoken, String intent, String situation, BooleanSupplier cancelled) {
         String userText = "Situation report:\n" + situation
                 + (brain.memory().plans.isBlank() ? "" : "\n" + brain.name() + "'s current plans: " + brain.memory().plans)
+                + (brain.memory().dayPlan.day < 0 ? "" : "\nToday is " + brain.memory().dayPlan.describe() + " Pace the work to match.")
                 + "\nWhat just happened: " + event
                 + "\n" + brain.name() + " said out loud: " + (spoken.isBlank() ? "(nothing)" : spoken)
                 + "\n" + (intent == null

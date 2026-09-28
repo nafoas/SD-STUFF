@@ -371,8 +371,11 @@ public class CompanionEntity extends PathAwareEntity {
             else if (d < 3 * 3) getNavigation().stop();
             return;
         }
-        if (getNavigation().isIdle() && p.curiosity() >= 5 && random.nextInt(Math.max(40, 600 - p.curiosity() * 50)) == 0) {
-            Vec3d spot = NoPenaltyTargeting.find(this, 4 + p.curiosity() * 2, 4);
+        // On free days even homebodies stroll around, and further.
+        boolean freeDay = brain() != null && brain().memory().dayPlan.kind.equals("free");
+        int curiosity = freeDay ? Math.min(10, p.curiosity() + 4) : p.curiosity();
+        if (getNavigation().isIdle() && curiosity >= 5 && random.nextInt(Math.max(40, 600 - curiosity * 50)) == 0) {
+            Vec3d spot = NoPenaltyTargeting.find(this, 4 + curiosity * 2, 4);
             if (spot != null) getNavigation().startMovingTo(spot.x, spot.y, spot.z, 0.8);
         }
     }

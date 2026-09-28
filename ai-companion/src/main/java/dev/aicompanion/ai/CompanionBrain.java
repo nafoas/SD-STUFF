@@ -209,6 +209,16 @@ public class CompanionBrain {
         }
     }
 
+    /** At sunrise (or when it first shows up that day) the character decides what kind of day it'll be. */
+    public void maybeMorning(long day) {
+        CompanionEntity e = entity();
+        if (e == null || memory.dayPlan.day == day || isThinkingOrActing() || e.isInCombat()) return;
+        long previous = memory.dayPlan.day;
+        memory.dayPlan.day = day; // ask once per day, even if the answer doesn't come back
+        dirty = true;
+        stimulate(new Stimulus("morning", previous < 0 ? "" : "Yesterday was " + memory.dayPlan.describe() + ".", null, 0));
+    }
+
     private void checkIn(List<CompanionMemory.JournalEntry> since) {
         lastCheckIn = System.currentTimeMillis();
         String digest = Digest.of(since);
@@ -251,6 +261,7 @@ public class CompanionBrain {
 
     private void stimulate(Stimulus s) {
         boolean optional = s.kind().equals("chatter") || s.kind().equals("overheard") || s.kind().equals("checkin");
+        if (s.kind().equals("morning")) optional = false;
         if (optional && queuedStimuli.get() > 0) return;
         if (queuedStimuli.get() >= 4) return; // don't pile up a backlog of stale events
         queuedStimuli.incrementAndGet();
@@ -281,6 +292,7 @@ public class CompanionBrain {
                 .append("you can walk around, mine, craft, build, fight, trade items and talk. This message comes from the game and describes what you perceive.\n\n")
                 .append(situation);
         if (!memory.plans.isBlank()) prompt.append("Your plans (in your own words): ").append(memory.plans).append("\n");
+        if (memory.dayPlan.day >= 0 && !s.kind().equals("morning")) prompt.append("Today you decided it's ").append(memory.dayPlan.describe()).append("\n");
         List<CompanionMemory.Promise> promises = memory.openPromises();
         if (!promises.isEmpty()) {
             prompt.append("Things you agreed to do: ");
@@ -292,6 +304,14 @@ public class CompanionBrain {
 
         String format;
         switch (s.kind()) {
+            case "morning" -> {
+                prompt.append("\nA new day is starting (day ").append(memory.dayPlan.day + 1).append("). ").append(s.event())
+                        .append(" What kind of day is today for you? A work day (practical jobs), a goals day (pushing on bigger plans), ")
+                        .append("a free day (wandering, visiting people, looking around, relaxing) or a mixed day. Decide the way you really would: ")
+                        .append("your mood, how hard you've been working, what's going on.\n");
+                format = "Say something in chat if you feel like it (or nothing). Then write \"DAY:\" followed by work, goals, free or mixed, "
+                        + "and optionally a few words on what you have in mind. Then \"INTENT:\" with what you do first.";
+            }
             case "checkin" -> {
                 prompt.append("\nTime to take stock. Since you last thought about things:\n").append(s.event().isBlank() ? "Not much happened.\n" : s.event());
                 format = "React in character if you want to (1 to 2 short sentences for the chat, or nothing). Then write \"INTENT:\" with what you'll do next "
@@ -334,6 +354,7 @@ public class CompanionBrain {
         }
         String compact = switch (s.kind()) {
             case "checkin" -> "[Taking stock]";
+            case "morning" -> "[A new day]";
             case "chatter" -> "[A quiet moment]";
             case "overheard" -> "[Overheard chat]";
             default -> "[" + s.event() + "]";
@@ -344,6 +365,12 @@ public class CompanionBrain {
 
         Reply parsed = Reply.parse(reply);
         debug("[" + s.kind() + "] intent: " + parsed.intent() + (parsed.plans() == null ? "" : " | plans: " + parsed.plans()));
+        if (parsed.day() != null) {
+            String d = parsed.day().toLowerCase();
+            memory.dayPlan.kind = d.startsWith("work") ? "work" : d.startsWith("goal") ? "goals" : d.startsWith("free") || d.startsWith("rest") || d.startsWith("off") ? "free" : "mixed";
+            memory.dayPlan.note = parsed.day().replaceFirst("(?i)^(work|goals?|free|mixed|rest|off)( day)?\\W*", "").trim();
+            log("decision", "Today: " + memory.dayPlan.describe(), false);
+        }
         if (parsed.plans() != null && !parsed.plans().isBlank()) {
             memory.plans = parsed.plans();
             log("decision", "Plans now: " + parsed.plans(), false);
@@ -366,8 +393,9 @@ public class CompanionBrain {
     }
 
     /** What the character wrote: spoken words, private intent, and optionally updated plans. */
-    record Reply(String spoken, @Nullable String intent, @Nullable String plans) {
+    record Reply(String spoken, @Nullable String intent, @Nullable String plans, @Nullable String day) {
         private static final Pattern PLANS = Pattern.compile("(?im)^[\\s*_>\\-]*plans?[\\s*_]*:[\\s*_]*(.*)$");
+        private static final Pattern DAY = Pattern.compile("(?im)^[\\s*_>\\-]*day[\\s*_]*:[\\s*_]*(.*)$");
 
         static Reply parse(String reply) {
             String text = reply;
@@ -375,6 +403,10 @@ public class CompanionBrain {
             Matcher pm = PLANS.matcher(text);
             while (pm.find()) plans = pm.group(1).trim();
             text = PLANS.matcher(text).replaceAll("").trim();
+            String day = null;
+            Matcher dm = DAY.matcher(text);
+            while (dm.find()) day = dm.group(1).trim();
+            text = DAY.matcher(text).replaceAll("").trim();
             String intent = null;
             String spoken = text;
             Matcher m = INTENT.matcher(text);
@@ -385,7 +417,7 @@ public class CompanionBrain {
             spoken = spoken.replaceAll("(?im)^[\\s*_]*(say(s)?|out loud|speech)[\\s*_]*:[\\s*_]*", "").trim();
             if (spoken.length() >= 2 && spoken.startsWith("\"") && spoken.endsWith("\"")) spoken = spoken.substring(1, spoken.length() - 1);
             if (spoken.matches("(?i)\\(?\\s*(nothing|silence|stays? (quiet|silent)|says nothing)\\s*\\.?\\)?")) spoken = "";
-            return new Reply(spoken, intent, plans);
+            return new Reply(spoken, intent, plans, day);
         }
     }
 

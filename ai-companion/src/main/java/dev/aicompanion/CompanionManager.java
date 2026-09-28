@@ -341,6 +341,7 @@ public final class CompanionManager {
                 CompanionEntity e = brain.entity();
                 if (e == null || !e.isAlive()) continue;
                 var p = brain.profile();
+                brain.maybeMorning(e.getWorld().getTimeOfDay() / 24000L);
                 brain.maybeCheckIn(now);
                 boolean playersAround = false;
                 for (ServerPlayerEntity pl : s.getPlayerManager().getPlayerList()) {

@@ -36,6 +36,7 @@ The personality affects behavior at three levels:
 ### Check-ins, chat and chatter
 
 - **Check-ins.** When a big task ends, or every few minutes, the character gets a summary of what its body did and what happened: tasks, fights, items gained and lost, gifts, news. It reacts, decides what to do next, and can update its plans in its own words. Fights and dodging never wait on this.
+- **Day plans.** At sunrise the character decides what kind of day it is: a work day, a day for its bigger goals, a free day (wandering, visiting, relaxing), or a mixed day. Its check-ins and the way it paces its work follow that all day. Free days are real days off, not two-minute breaks.
 - **Private intentions.** Every reply has what it says out loud and what it privately intends, and the two can differ.
 - **Chat awareness.** Companions see all of server chat. Messages that concern them get the character's attention: their name, their interests, places they know, coordinates, questions to "anyone", lively conversations, people joining. They chime in only when it fits their character, and sociable ones more often.
 - **Requests.** Asking something becomes a promise it tracks. If it's busy, the character decides whether to drop what it's doing or say it's busy.

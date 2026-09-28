@@ -116,7 +116,8 @@ public final class CompanionCommands {
             n++;
             String doing = e.currentTaskDescription();
             sb.append("\n - ").append(brain.name()).append(" at ").append(e.getBlockPos().toShortString())
-                    .append(", ").append(doing == null ? (brain.isThinkingOrActing() ? "thinking" : "idle") : doing);
+                    .append(", ").append(doing == null ? (brain.isThinkingOrActing() ? "thinking" : "idle") : doing)
+                    .append(brain.memory().dayPlan.day < 0 ? "" : " (" + brain.memory().dayPlan.kind + " day)");
         }
         if (n == 0) sb.append(" none in the world. Use /companion spawn <name>.");
         ctx.getSource().sendFeedback(() -> Text.literal(sb.toString()), false);

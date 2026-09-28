@@ -104,6 +104,27 @@ public class CompanionMemory {
     public List<Promise> promises = new ArrayList<>();
     /** The character's own words on what it's planning and what matters to it right now (updated at check-ins). */
     public String plans = "";
+
+    /** What kind of day the character decided today is. Free time is planned in whole days, not minutes. */
+    public static class DayPlan {
+        /** Minecraft day number this plan is for (-1 = none yet). */
+        public long day = -1;
+        /** work, goals, free or mixed */
+        public String kind = "mixed";
+        public String note = "";
+
+        public String describe() {
+            String what = switch (kind) {
+                case "work" -> "a work day (practical jobs, needs, keeping things running)";
+                case "goals" -> "a day for pushing on your bigger goals";
+                case "free" -> "a free day (wandering, visiting, looking around, relaxing; only urgent things get done)";
+                default -> "a mixed day (some work, some time to yourself)";
+            };
+            return what + (note.isBlank() ? "" : ". " + note);
+        }
+    }
+
+    public DayPlan dayPlan = new DayPlan();
     /** Players (lowercase) who said the companion may take things from their chests. */
     public Set<String> chestPermissions = ConcurrentHashMap.newKeySet();
 
@@ -125,6 +146,7 @@ public class CompanionMemory {
         structures = new CopyOnWriteArrayList<>(structures == null ? List.of() : structures);
         promises = new CopyOnWriteArrayList<>(promises == null ? List.of() : promises);
         if (plans == null) plans = "";
+        if (dayPlan == null) dayPlan = new DayPlan();
         Set<String> perms = ConcurrentHashMap.newKeySet();
         if (chestPermissions != null) perms.addAll(chestPermissions);
         chestPermissions = perms;
