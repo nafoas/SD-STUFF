@@ -29,7 +29,9 @@ public final class BreakPolicy {
         /** Harvesting a mature crop (must be replanted). */
         HARVEST,
         /** Trapped with no other way out: may break one ordinary block (and should put it back). */
-        ESCAPE
+        ESCAPE,
+        /** Getting about: clearing the way (its own builds are left alone, only its own junk and terrain go). */
+        MOVE
     }
 
     /** Null means allowed; otherwise a short reason it isn't. */
@@ -42,7 +44,14 @@ public final class BreakPolicy {
 
         String self = BlockOwnership.companionOwner(c.getCharacterId());
         String owner = BlockOwnership.get(world).owner(pos);
-        if (self.equals(owner)) return null; // its own block
+        if (self.equals(owner)) {
+            // Its own block. Fine to take, except that walking somewhere is no reason to dig through its own house.
+            if (purpose == Purpose.MOVE) {
+                BuildAwareness.Kind kind = BuildAwareness.classify(world, pos).kind();
+                if (kind == BuildAwareness.Kind.BUILD || kind == BuildAwareness.Kind.HOME) return "it's part of your own build";
+            }
+            return null;
+        }
 
         if (state.getBlock() instanceof CropBlock crop) {
             return crop.isMature(state) ? null : "the crop isn't ripe yet";

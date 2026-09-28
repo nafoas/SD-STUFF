@@ -96,6 +96,20 @@ public final class Actions {
                                 "dx", Map.of("type", "integer"), "dy", Map.of("type", "integer"), "dz", Map.of("type", "integer"),
                                 "block", str("Block id with optional state")), "required", List.of("dx", "dy", "dz", "block")))),
                 List.of("label")));
+        specs.add(new Spec("plan_build", "Design a new building or an extension to one of yours (a room, a storage room down a hallway, a second floor with stairs, "
+                + "a balcony, furniture) from a wish in the character's words. An architect lays out rooms, doors, stairs, windows, lights, roof and furniture to suit "
+                + "the character and what's already there, and checks every room can be walked to. Reports the rooms and the materials needed. "
+                + "Use this rather than build for homes and anything with rooms.",
+                Map.of("wish", str("What the character wants, in their words, e.g. 'a cosy storage room off the kitchen' or 'a second floor with a balcony to watch sunsets'"),
+                        "building", str("Which of your buildings to extend (e.g. home); 'new' or empty for a new building if you have none"),
+                        "x", num("For a new building: build near this X (default: near home or here)"), "z", num("For a new building: near this Z")),
+                List.of("wish")));
+        specs.add(new Spec("build_plan", "Build the design made with plan_build (checks materials first). Can be called again to continue if it stops partway.",
+                Map.of("building", str("Which design (default: the waiting one)"),
+                        "skip_missing", Map.of("type", "boolean", "description", "Build what you have materials for now and leave the rest for later")),
+                List.of()));
+        specs.add(new Spec("scan_building", "Take stock of one of your buildings you're standing in or next to (rooms, doors, stairs) so it can be extended with plan_build.",
+                Map.of("name", str("What to call it, e.g. home")), List.of("name")));
         specs.add(new Spec("give_items", "Walk to a player and hand them items from the inventory.",
                 Map.of("player", str("Player name"), "item", str("Item id"), "count", num("How many")), List.of("player", "item", "count")));
         specs.add(new Spec("attack", "Hunt and fight creatures nearby. Target is a mob type (zombie, cow, skeleton), 'monsters' for any hostile mob, or a player name.",
@@ -194,6 +208,12 @@ public final class Actions {
         if (c == null || !c.isAlive()) throw new ActionError("The companion's body isn't in the world right now.");
         MinecraftServer server = c.getServer();
         if (server == null) throw new ActionError("Server not available.");
+        if (name.equals("plan_build")) {
+            // Designing takes a Claude call or two: done here on the body thread, not the server thread.
+            JsonObject in = input;
+            BlockPos near = in.has("x") && in.has("z") ? new BlockPos(integer(in, "x", 0), c.getBlockY(), integer(in, "z", 0)) : null;
+            return Designer.design(brain, string(in, "wish"), in.has("building") && !in.get("building").isJsonNull() ? in.get("building").getAsString() : null, near);
+        }
 
         CompletableFuture<CompletableFuture<String>> started = new CompletableFuture<>();
         server.execute(() -> {
@@ -338,6 +358,9 @@ public final class Actions {
                 c.startTask(new BuildTask(in.has("label") ? in.get("label").getAsString() : "a structure",
                         in.has("purpose") ? in.get("purpose").getAsString() : "other", placements), done);
             }
+            case "build_plan" -> Designer.build(brain, c, in.has("building") && !in.get("building").isJsonNull() ? in.get("building").getAsString() : null,
+                    in.has("skip_missing") && in.get("skip_missing").getAsBoolean(), done);
+            case "scan_building" -> done.complete(Designer.scan(brain, c, c.getBlockPos(), string(in, "name")));
             case "give_items" -> {
                 ServerPlayerEntity p = player(c, string(in, "player"));
                 Item item = item(in, "item");

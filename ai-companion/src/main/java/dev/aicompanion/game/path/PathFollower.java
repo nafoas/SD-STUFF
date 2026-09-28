@@ -62,6 +62,7 @@ public class PathFollower {
         }
         restoreEscapeBlocks(c, false);
         PathFinder.Step step = plan.steps().get(index);
+        handleDoors(c, step.pos());
         if (++stepTicks > 100) {
             if (dev.aicompanion.ModConfig.get().debugPaths) dev.aicompanion.AiCompanionMod.LOGGER.info("[path] {} stuck on {} {} at {}", c.getCharacterName(),
                     step.kind(), step.pos().toShortString(), c.getPos());
@@ -72,7 +73,7 @@ public class PathFollower {
         for (BlockPos b : step.breaks()) {
             BlockState s = c.getWorld().getBlockState(b);
             if (s.isAir() || s.getCollisionShape(c.getWorld(), b).isEmpty()) continue;
-            if (!escaping && !BreakPolicy.allowed(c, b, BreakPolicy.Purpose.GATHER)) return replan(c);
+            if (!escaping && !BreakPolicy.allowed(c, b, BreakPolicy.Purpose.MOVE)) return replan(c);
             if (escaping && dev.aicompanion.ModConfig.get().debugPaths) dev.aicompanion.AiCompanionMod.LOGGER.info("[path] escape-breaking {} (recorded {})", b.toShortString(), toRestore.size());
             if (escaping && toRestore.size() < 2 && !toRestore.contains(b)) {
                 toRestore.add(b);
@@ -159,9 +160,40 @@ public class PathFollower {
         return Vec3d.ofBottomCenter(target);
     }
 
-    /** Call when the trip ends for any reason: puts back anything broken to escape. */
+    /** Call when the trip ends for any reason: puts back anything broken to escape, closes doors behind it. */
     public void finish(CompanionEntity c) {
         restoreEscapeBlocks(c, true);
+        for (BlockPos d : openedDoors) setDoor(c, d, false);
+        openedDoors.clear();
+    }
+
+    /** Wooden doors it opened on the way, to close behind it. */
+    private final List<BlockPos> openedDoors = new ArrayList<>();
+
+    /** Opens a wooden door in the way (where it stands or where it's stepping), like a player; closes ones left behind. */
+    private void handleDoors(CompanionEntity c, BlockPos next) {
+        for (BlockPos p : new BlockPos[]{c.getBlockPos(), next, next.up()}) {
+            BlockState s = c.getWorld().getBlockState(p);
+            if (s.getBlock() instanceof net.minecraft.block.DoorBlock && s.isIn(net.minecraft.registry.tag.BlockTags.WOODEN_DOORS) && !s.get(net.minecraft.block.DoorBlock.OPEN)) {
+                BlockPos lower = s.get(net.minecraft.block.DoorBlock.HALF) == net.minecraft.block.enums.DoubleBlockHalf.UPPER ? p.down() : p;
+                setDoor(c, lower, true);
+                if (!openedDoors.contains(lower)) openedDoors.add(lower);
+            }
+        }
+        for (int i = openedDoors.size() - 1; i >= 0; i--) {
+            BlockPos d = openedDoors.get(i);
+            if (c.getBlockPos().getSquaredDistance(d) > 2.5 * 2.5 && !c.getBoundingBox().intersects(new net.minecraft.util.math.Box(d).expand(0, 1, 0))) {
+                setDoor(c, d, false);
+                openedDoors.remove(i);
+            }
+        }
+    }
+
+    private static void setDoor(CompanionEntity c, BlockPos lower, boolean open) {
+        BlockState s = c.getWorld().getBlockState(lower);
+        if (s.getBlock() instanceof net.minecraft.block.DoorBlock door && s.get(net.minecraft.block.DoorBlock.OPEN) != open) {
+            door.setOpen(c, c.getWorld(), s, lower, open);
+        }
     }
 
     private static void moveToward(CompanionEntity c, Vec3d pos) {
@@ -181,7 +213,7 @@ public class PathFollower {
         index = 0;
         stepTicks = 0;
         int filler = c.fillerCount();
-        plan = PathFinder.find(c, goal, within, BreakPolicy.Purpose.GATHER, filler);
+        plan = PathFinder.find(c, goal, within, BreakPolicy.Purpose.MOVE, filler);
         boolean trapped = (plan.isEmpty() || !plan.reachesGoal()) && isTrapped(c);
         if (dev.aicompanion.ModConfig.get().debugPaths) dev.aicompanion.AiCompanionMod.LOGGER.info("[path] normal plan reaches={} steps={} trapped={}", plan.reachesGoal(), plan.steps().size(), trapped);
         if (trapped) {
@@ -208,7 +240,7 @@ public class PathFollower {
     private static boolean isTrapped(CompanionEntity c) {
         int[][] dirs = {{8, 0}, {-8, 0}, {0, 8}, {0, -8}};
         for (int[] d : dirs) {
-            PathFinder.Plan probe = PathFinder.find(c, c.getPos().add(d[0], 0, d[1]), 2.5, BreakPolicy.Purpose.GATHER, 0);
+            PathFinder.Plan probe = PathFinder.find(c, c.getPos().add(d[0], 0, d[1]), 2.5, BreakPolicy.Purpose.MOVE, 0);
             if (probe.reachesGoal()) return false;
         }
         return true;

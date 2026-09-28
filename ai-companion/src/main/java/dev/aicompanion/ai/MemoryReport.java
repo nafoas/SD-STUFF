@@ -33,6 +33,16 @@ public final class MemoryReport {
                     .min(Comparator.comparingDouble(s -> here.getSquaredDistance(s.x, s.y, s.z)))
                     .ifPresent(s -> resources.add(e.getKey() + " " + where(s.dimension, s.x, s.y, s.z, dim, here)));
         }
+        if (!m.buildings.isEmpty()) {
+            List<String> parts = new ArrayList<>();
+            for (var b : m.buildings) {
+                int[] ctr = b.center();
+                parts.add(b.name + " (" + b.rooms.size() + " rooms: " + String.join(", ", b.rooms.stream().map(r -> r.purpose).distinct().toList()) + ") "
+                        + where(b.dimension, ctr[0], ctr[1], ctr[2], dim, here));
+            }
+            sb.append("Your buildings: ").append(String.join("; ", parts)).append(".\n");
+        }
+        if (!m.drafts.isEmpty()) sb.append("Designs waiting to be built (build_plan): ").append(String.join(", ", m.drafts.keySet())).append(".\n");
         if (!resources.isEmpty()) sb.append("Resources you've seen: ").append(String.join("; ", resources.subList(0, Math.min(12, resources.size())))).append(".\n");
         return sb.toString();
     }

@@ -439,6 +439,16 @@ public class CompanionBrain {
     private void checkIn(List<CompanionMemory.JournalEntry> since) {
         lastCheckIn = System.currentTimeMillis();
         String digest = Digest.of(since);
+        // Something big got finished: ask what's next, the way you'd ask a friend.
+        List<String> accomplished = new java.util.ArrayList<>();
+        for (CompanionMemory.JournalEntry j : since) {
+            if (j.kind.equals("built")) accomplished.add(j.text.replaceFirst("^Finished ", ""));
+            else if (j.kind.equals("goal") && j.text.startsWith("Achieved goal: ")) accomplished.add(j.text.substring("Achieved goal: ".length()));
+        }
+        if (!accomplished.isEmpty()) {
+            digest += "\nYou finished: " + String.join("; ", accomplished) + ". Now that that's done, what do you want next? "
+                    + "It can be practical, or just something you'd enjoy (a bigger house, a new room, a tower, a garden, a trip somewhere).";
+        }
         stimulate(new Stimulus("checkin", digest, null, 0));
     }
 

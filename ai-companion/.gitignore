@@ -1,10 +1,10 @@
-.gradle/
-build/
-run/
-out/
+/.gradle/
+/build/
+/run/
+/out/
 *.iml
 .idea/
 .vscode/
-bin/
+/bin/
 # Never commit API keys
 ai-companion.json

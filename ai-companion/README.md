@@ -52,7 +52,7 @@ The personality affects behavior at three levels:
 
 It also remembers how it feels about each player (hit it and it holds a grudge, give it gifts and it warms up). All of this survives restarts, along with:
 - **An activity log** of everything it did and experienced: tasks, fights, items gained and lost, conversations, decisions.
-- **World memory:** named places (home, farm, mine, storage), what's in every chest it has used (it goes straight to the right chest), resources it has seen and where, and what it built.
+- **World memory:** named places (home, farm, mine, storage), what's in every chest it has used (it goes straight to the right chest), resources it has seen and where, and what it built, down to the rooms of its buildings.
 
 ## Respecting other people's builds
 
@@ -100,6 +100,8 @@ Companions look at the blocks around them the way a player would. There's nothin
 | `/companion memory <name>` | Places, chests and resources it remembers |
 | `/companion reinterview <name>` | Rebuild the profile from a fresh self-description |
 | `/companion sethunger <0-20> <name>` | Set a companion's hunger (for testing; ops only) |
+| `/companion buildings <name>` | Its buildings and waiting designs, with floor maps |
+| `/companion stock <item> <count> <name>` | Put items in a companion's bag (for testing; ops only) |
 | `/companion checkblock <x y z>` | Why companions would or wouldn't break a block (who placed it, whose build it's part of) |
 | `/companion debug <name>` | Show its decisions and actions to its owner in chat |
 | `/companion reload` | Reload the config |
@@ -161,13 +163,48 @@ Profiles are saved in `config/ai-companion/profiles/<id>.json`, and you can edit
   - **Paths:** it lays a dirt path between its places (home, farm, mine), and trips between them follow it.
   - **Light:** it places torches on dark spots around its base and mine.
 
+## Houses that grow
+
+Companions design their own buildings room by room and extend them over time. They don't use templates, so every building turns out different.
+
+- **Wishes, not blueprints.** When a big job is done, the character is asked what it wants next, now that the job is finished. It might be something practical (more storage) or just something it would enjoy (a second floor with a balcony to watch sunsets). Its answer becomes a goal.
+- **An architect turns the wish into design changes:**
+  - add a room on a free side of an existing room, joined by a door, an opening or a hallway;
+  - add a floor on top, with stairs up;
+  - add a balcony;
+  - add furniture.
+
+  The architect sees the building as it stands, floor by floor, plus the character's taste and energy. A lazy character adds one small room. A perfectionist adds a hallway and a balcony.
+- **Building rules fill in the details:**
+  - walls with log corner pillars and a base course;
+  - windows along outside walls;
+  - doors where rooms meet, and a front door with a step;
+  - lights so nothing is dark, with lanterns hanging from the ceiling if that's its style;
+  - a straight staircase with headroom along a wall with no doors;
+  - a gable or flat roof, taken off and rebuilt when a floor goes on top;
+  - furniture for each room's purpose (bed and chest, chests along the walls, furnace and crafting table...);
+  - matching materials when extending.
+- **Checked before building.**
+  - Every room must be reachable on foot from the front door.
+  - Nothing may cut into someone else's build.
+  - The architect sees a floor-by-floor map of the result, with any problems, and gets one round to fix them.
+- **Built like a player would.** New buildings go on flat, dry, free ground near home. The companion lists the materials, gathers or crafts what's missing (from storage first), then builds bottom-up. It picks up where it left off if it runs out of time or materials.
+  - It stands on throwaway dirt or cobblestone to reach the roof, then takes the scaffolding down and clears up any pillars.
+  - It opens and closes doors as it goes.
+  - It never digs through its own house to get somewhere.
+  - Building takes real time. In testing:
+    - a three-room cottage took about 6 minutes;
+    - a storage room added down a hallway took about 3;
+    - a second floor took about 17, most of it spent taking the old roof off by hand (an axe helps).
+- **Existing buildings.** A house built some other way can be read into rooms by looking at where the enclosed spaces, doors and stairs are, and then extended the same way.
+
 ## What companions can do
 
 - **Gather:** mine exposed blocks with the right tool, using real break times. Ore names match deepslate variants too.
 - **Dig:** level tunnels, and staircases down or up to reach ores. Stops before breaking into lava or water.
 - **Craft:** full recipe chains from the game's own recipe data, for example logs → planks → sticks → pickaxe. Places a crafting table when a recipe needs one. Reports exactly what's missing.
 - **Smelt:** uses a nearby furnace, or places one, and burns fuel from the bag. Uses vanilla timing.
-- **Build:** blueprints made of boxes and single blocks, with block states such as stairs facing a direction. Checks materials first. Clears grass, dirt and stone in the way but nothing else. Never places a block inside a creature.
+- **Build:** designed buildings (above), or blueprints made of boxes and single blocks for everything else (walls, towers, bridges, decorations), with block states such as stairs facing a direction. Checks materials first. Clears grass, dirt and stone in the way but nothing else. Never places a block inside a creature.
 - **Everything else:** give items to players (thrown if it can't walk up to them), fight, store or take items from chests, follow, stay and guard, remember places.
 - **Reflexes:** eat when hurt, run from creepers, fight or flee depending on bravery, defend players they like, wear the best armor they carry, pick up items.
 

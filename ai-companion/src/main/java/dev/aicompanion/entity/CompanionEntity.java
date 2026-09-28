@@ -639,6 +639,10 @@ public class CompanionEntity extends PathAwareEntity {
     }
 
     /** Throwaway blocks it's happy to pillar and bridge with. */
+    public static boolean isFiller(Item item) {
+        return FILLER.contains(item);
+    }
+
     private static final java.util.Set<Item> FILLER = java.util.Set.of(net.minecraft.item.Items.DIRT, net.minecraft.item.Items.COBBLESTONE,
             net.minecraft.item.Items.COBBLED_DEEPSLATE, net.minecraft.item.Items.NETHERRACK, net.minecraft.item.Items.ANDESITE,
             net.minecraft.item.Items.DIORITE, net.minecraft.item.Items.GRANITE, net.minecraft.item.Items.TUFF, net.minecraft.item.Items.STONE,
@@ -662,7 +666,17 @@ public class CompanionEntity extends PathAwareEntity {
             }
         }
         if (best == null || !(best instanceof net.minecraft.item.BlockItem blockItem)) return false;
-        return placeBlock(pos, blockItem.getBlock().getDefaultState());
+        if (!placeBlock(pos, blockItem.getBlock().getDefaultState())) return false;
+        fillerPlaced.put(pos.toImmutable(), System.currentTimeMillis());
+        if (fillerPlaced.size() > 256) fillerPlaced.remove(fillerPlaced.keySet().iterator().next());
+        return true;
+    }
+
+    /** Throwaway blocks put down recently (pillars, bridges, scaffolds) and when, so a build can clear them up after. */
+    private final java.util.LinkedHashMap<BlockPos, Long> fillerPlaced = new java.util.LinkedHashMap<>();
+
+    public java.util.Map<BlockPos, Long> recentFiller() {
+        return fillerPlaced;
     }
 
     public void equipBestToolFor(BlockState state) {
@@ -794,7 +808,7 @@ public class CompanionEntity extends PathAwareEntity {
             pos = pos.offset(state.get(Properties.HORIZONTAL_FACING).getOpposite());
             state = state.with(Properties.BED_PART, BedPart.FOOT);
         }
-        if (getWorld().getBlockState(pos).equals(state)) return true;
+        if (dev.aicompanion.game.tasks.BuildTask.matches(getWorld().getBlockState(pos), state)) return true;
         Item item = state.getBlock().asItem();
         if (remove(item, 1) < 1) return false;
         getLookControl().lookAt(Vec3d.ofCenter(pos));
@@ -806,7 +820,8 @@ public class CompanionEntity extends PathAwareEntity {
             getWorld().setBlockState(pos, state, net.minecraft.block.Block.NOTIFY_LISTENERS);
             getWorld().setBlockState(pos.offset(state.get(Properties.HORIZONTAL_FACING)), state.with(Properties.BED_PART, BedPart.HEAD), net.minecraft.block.Block.NOTIFY_ALL);
         } else {
-            getWorld().setBlockState(pos, state);
+            // Settle connections (panes, fences, stair corners) against what's already around it.
+            getWorld().setBlockState(pos, net.minecraft.block.Block.postProcessState(state, getWorld(), pos));
         }
         dev.aicompanion.world.BlockOwnership owners = dev.aicompanion.world.BlockOwnership.get(serverWorld());
         String self = dev.aicompanion.world.BlockOwnership.companionOwner(characterId);

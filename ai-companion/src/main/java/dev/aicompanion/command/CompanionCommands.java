@@ -109,6 +109,40 @@ public final class CompanionCommands {
                             e.setFood(com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "value"));
                             ctx.getSource().sendFeedback(() -> Text.literal(brain.name() + "'s hunger is now " + e.getFood() + "/20."), false);
                         })))));
+        root.then(literal("stock").requires(src -> src.hasPermissionLevel(2))
+                .then(argument("item", StringArgumentType.word())
+                        .then(argument("count", com.mojang.brigadier.arguments.IntegerArgumentType.integer(1, 2304))
+                                .then(argument("name", StringArgumentType.greedyString()).suggests(ACTIVE).executes(ctx -> withBody(ctx, (brain, e) -> {
+                                    String id = StringArgumentType.getString(ctx, "item");
+                                    var item = dev.aicompanion.game.Ids.item(id);
+                                    if (item.isEmpty()) {
+                                        ctx.getSource().sendError(Text.literal("Unknown item " + id));
+                                        return;
+                                    }
+                                    int n = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "count");
+                                    while (n > 0) {
+                                        int k = Math.min(n, item.get().getMaxCount());
+                                        e.give(new net.minecraft.item.ItemStack(item.get(), k));
+                                        n -= k;
+                                    }
+                                    ctx.getSource().sendFeedback(() -> Text.literal("Gave " + brain.name() + " " + id + "."), false);
+                                }))))));
+        root.then(literal("buildings")
+                .then(argument("name", StringArgumentType.greedyString()).suggests(ACTIVE).executes(ctx -> withBody(ctx, (brain, e) -> {
+                    var mem = brain.memory();
+                    StringBuilder sb = new StringBuilder();
+                    for (var b : mem.buildings) sb.append(b.describe()).append(dev.aicompanion.game.build.Architect.floorMaps(e.serverWorld(), b, java.util.Map.of()));
+                    for (var d : mem.drafts.values()) {
+                        sb.append("[draft] ").append(d.describe());
+                        var planned = dev.aicompanion.game.build.Architect.compile(e.serverWorld(), d.copy());
+                        sb.append(dev.aicompanion.game.build.Architect.floorMaps(e.serverWorld(), d, planned));
+                        for (var l : d.links) sb.append("link ").append(l.a).append("-").append(l.b).append(" ").append(l.type).append(" at ")
+                                .append(l.x).append(",").append(l.y).append(",").append(l.z).append(l.built ? " built" : "").append("\n");
+                    }
+                    String out = sb.isEmpty() ? brain.name() + " has no buildings on record." : sb.toString();
+                    dev.aicompanion.AiCompanionMod.LOGGER.info("[{}] buildings:\n{}", brain.name(), out);
+                    ctx.getSource().sendFeedback(() -> Text.literal(out), false);
+                }))));
         root.then(literal("reload").requires(src -> src.hasPermissionLevel(2)).executes(ctx -> {
             ModConfig.load();
             ctx.getSource().sendFeedback(() -> Text.literal("Reloaded config/ai-companion.json."), true);

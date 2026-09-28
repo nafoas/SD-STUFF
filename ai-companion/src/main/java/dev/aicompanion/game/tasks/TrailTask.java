@@ -52,7 +52,7 @@ public class TrailTask extends Task {
             if (move == Move.FAILED) return fail("Couldn't get to " + fromName + ".");
             if (move == Move.MOVING) return null;
             atStart = true;
-            PathFinder.Plan plan = PathFinder.find(c, Vec3d.ofBottomCenter(new BlockPos(to.x, to.y, to.z)), 2.0, BreakPolicy.Purpose.GATHER, 0);
+            PathFinder.Plan plan = PathFinder.find(c, Vec3d.ofBottomCenter(new BlockPos(to.x, to.y, to.z)), 2.0, BreakPolicy.Purpose.MOVE, 0);
             if (!plan.reachesGoal()) return fail("There's no walkable way from " + fromName + " to " + toName + " to lay a path along.");
             route = new ArrayList<>();
             for (PathFinder.Step st : plan.steps()) route.add(st.pos());

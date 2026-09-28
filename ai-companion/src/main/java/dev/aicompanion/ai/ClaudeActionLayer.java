@@ -146,8 +146,13 @@ public final class ClaudeActionLayer {
                 - Needs show up as goals marked "need"; urgent ones come first, and they close by themselves once handled.
 
                 Building well:
-                - Plan the whole structure, check materials with get_status, gather or craft what is missing, then build. Use build with boxes: \
-                foundation/floor, walls as hollow boxes, openings carved with air, then door, windows, roof and details. Split very big builds into several build calls.
+                - Houses, homes, rooms, extensions (more storage, a second floor, a balcony, a workshop) and anything else with rooms: use plan_build with \
+                the character's wish in their words, then gather or craft the materials it lists (storage first), then build_plan. \
+                Extend the buildings %1$s already has rather than building a new one each time, unless the wish is clearly for a separate building. \
+                A building you made without plan_build can be taken stock of with scan_building (stand inside it) before extending it.
+                - Other structures (walls, towers, bridges, farms' fences, decorations): plan the whole thing, check materials with get_status, gather or \
+                craft what is missing, then build. Use build with boxes: foundation/floor, walls as hollow boxes, openings carved with air, then door, windows, \
+                roof and details. Split very big builds into several build calls.
                 - Good-looking builds use a floor or foundation of a different block, log pillars at the corners, plank or stone walls with glass_pane windows, \
                 a stair roof overhanging the walls by one block, a door, and torches or lanterns inside and out. Avoid plain one-material cubes unless %1$s is lazy or sloppy.
                 - Coordinates: +x is east, -z is north, +y is up. dy 0 is the ground level the body stands on.

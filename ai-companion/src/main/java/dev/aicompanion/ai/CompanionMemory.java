@@ -179,6 +179,9 @@ public class CompanionMemory {
         public List<int[]> points = new ArrayList<>();
     }
 
+    /** Buildings it knows room by room (its own, designed or scanned), and designs not built yet by building name. */
+    public List<dev.aicompanion.game.build.BuildingModel> buildings = new ArrayList<>();
+    public Map<String, dev.aicompanion.game.build.BuildingModel> drafts = new LinkedHashMap<>();
     public List<Farm> farms = new ArrayList<>();
     public List<Mine> mines = new ArrayList<>();
     public List<Trail> trails = new ArrayList<>();
@@ -212,6 +215,8 @@ public class CompanionMemory {
         if (plans == null) plans = "";
         if (dayPlan == null) dayPlan = new DayPlan();
         farms = new CopyOnWriteArrayList<>(farms == null ? List.of() : farms);
+        buildings = new CopyOnWriteArrayList<>(buildings == null ? List.of() : buildings);
+        drafts = new ConcurrentHashMap<>(drafts == null ? Map.of() : drafts);
         mines = new CopyOnWriteArrayList<>(mines == null ? List.of() : mines);
         trails = new CopyOnWriteArrayList<>(trails == null ? List.of() : trails);
         Set<String> perms = ConcurrentHashMap.newKeySet();
@@ -336,6 +341,22 @@ public class CompanionMemory {
         List<Promise> out = new ArrayList<>();
         for (Promise p : promises) if (p.status.equals("open")) out.add(p);
         return out;
+    }
+
+    @org.jetbrains.annotations.Nullable
+    public dev.aicompanion.game.build.BuildingModel building(String name) {
+        String n = name == null ? "" : name.trim().toLowerCase();
+        if (!n.isBlank()) {
+            for (var b : buildings) if (b.name.equalsIgnoreCase(n)) return b;
+            for (var b : buildings) if (b.name.toLowerCase().contains(n)) return b;
+        }
+        if (n.isBlank() || n.contains("home") || n.contains("house")) {
+            for (var b : buildings) if (b.name.toLowerCase().contains("home") || b.name.toLowerCase().contains("house")) return b;
+            Location h = home();
+            if (h != null) for (var b : buildings) if (b.contains(h.dimension, h.x, h.y, h.z, 2)) return b;
+            if (n.isBlank()) return buildings.isEmpty() ? null : buildings.get(0);
+        }
+        return null;
     }
 
     public void addStructure(Structure s) {

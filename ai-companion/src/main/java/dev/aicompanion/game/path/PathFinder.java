@@ -252,6 +252,8 @@ public final class PathFinder {
             float speed = Math.max(1.0f, tool.getMiningSpeedMultiplier(s));
             double ticks = hardness == 0 ? 1 : Math.ceil(hardness * (CompanionEntity.canHarvestWith(tool, s) ? 30 : 100) / speed);
             if (ticks > MAX_BREAK_TICKS && purpose != BreakPolicy.Purpose.ESCAPE) return -1;
+            // Glass drops nothing, so it could never be put back: go through anything else first.
+            if (s.isIn(BlockTags.IMPERMEABLE) || s.getBlock() instanceof net.minecraft.block.PaneBlock && !(s.isOf(Blocks.IRON_BARS))) ticks += 60;
             return ticks + 2;
         }
 
