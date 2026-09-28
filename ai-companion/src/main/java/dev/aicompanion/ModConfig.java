@@ -30,10 +30,20 @@ public class ModConfig {
     /** Max tool calls Claude may make for a single decision. */
     public int maxActionsPerDecision = 16;
 
-    /** Seconds between "what do you feel like doing?" check-ins when a companion is idle. 0 disables. */
-    public int idleThinkSeconds = 150;
-    /** After finishing (or failing) a task, let the character react to the outcome in chat. */
+    /**
+     * The character takes stock (reads what happened, updates its plans) when a big task ends,
+     * or after this many minutes, whichever comes first. 0 = only when a big task ends.
+     */
+    public int checkInMinutes = 5;
+    /** Check in when a big task ends (not just on the timer). */
     public boolean reactToResults = true;
+    /**
+     * Roughly how many minutes between casual remarks in chat for an average character (sociable ones talk more,
+     * quiet ones less). Only while players are around. 0 disables casual chatter.
+     */
+    public int chatterMinutes = 6;
+    /** Let companions chime in on chat conversations they weren't addressed in, when it's relevant to them. */
+    public boolean overhearChat = true;
     /** Players within this many blocks of a companion they recently spoke to keep the conversation going without naming it. */
     public int conversationRadius = 10;
     /** Companions only hear chat from players within this many blocks (0 = anywhere on the server). */

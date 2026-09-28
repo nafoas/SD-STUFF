@@ -33,6 +33,16 @@ The personality affects behavior at three levels:
    | Curiosity, diligence, sociability | Restless characters check in on their own more often. |
    | Generosity | Whether it lets strangers look in its bag. |
 
+### Check-ins, chat and chatter
+
+- **Check-ins.** When a big task ends, or every few minutes, the character gets a summary of what its body did and what happened: tasks, fights, items gained and lost, gifts, news. It reacts, decides what to do next, and can update its plans in its own words. Fights and dodging never wait on this.
+- **Private intentions.** Every reply has what it says out loud and what it privately intends, and the two can differ.
+- **Chat awareness.** Companions see all of server chat. Messages that concern them get the character's attention: their name, their interests, places they know, coordinates, questions to "anyone", lively conversations, people joining. They chime in only when it fits their character, and sociable ones more often.
+- **Requests.** Asking something becomes a promise it tracks. If it's busy, the character decides whether to drop what it's doing or say it's busy.
+- **"Come look at my build".** It walks over, looks the build over (size, materials, beds, storage, windows, lights) and gives its opinion.
+- **Points of interest.** Coordinates mentioned in chat ("my base is at 120 70 -40") are remembered as places it can visit.
+- **Casual chatter.** Now and then it just says something: a remark about what it's doing, a thought, a question for someone. Only while players are around, and how often depends on how sociable it is.
+
 It also remembers how it feels about each player (hit it and it holds a grudge, give it gifts and it warms up). All of this survives restarts, along with:
 - **An activity log** of everything it did and experienced: tasks, fights, items gained and lost, conversations, decisions.
 - **World memory:** named places (home, farm, mine, storage), what's in every chest it has used (it goes straight to the right chest), resources it has seen and where, and what it built.
@@ -93,8 +103,10 @@ Profiles are saved in `config/ai-companion/profiles/<id>.json`, and you can edit
 | `claudeModel` | `claude-opus-5` | Model for the action layer |
 | `claudeEffort` | `low` | `low`, `medium` or `high`. Lower is faster and cheaper. |
 | `maxActionsPerDecision` | 16 | Cap on tool calls per decision |
-| `idleThinkSeconds` | 150 | How often idle companions decide something on their own. 0 turns this off. |
-| `reactToResults` | true | Let the character comment on how a task went and pick a follow-up |
+| `checkInMinutes` | 5 | The character takes stock when a big task ends, or after this many minutes. 0 means only when a task ends. |
+| `reactToResults` | true | Check in when a big task ends, not just on the timer |
+| `chatterMinutes` | 6 | Rough gap between casual remarks for an average character. Sociable ones talk more, quiet ones less. 0 turns chatter off. |
+| `overhearChat` | true | Let companions chime in on relevant chat they weren't addressed in |
 | `conversationRadius` | 10 | Distance within which you can keep talking without the name |
 | `hearingRadius` | 0 | If above 0, companions only hear chat within this many blocks |
 | `managePermissionLevel` | 2 | Permission level needed for spawn, dismiss, reinterview and debug |
@@ -104,7 +116,7 @@ Profiles are saved in `config/ai-companion/profiles/<id>.json`, and you can edit
 | `skins` | `{}` | `{"Grug": "Notch"}` uses a Minecraft username's skin, or give a direct 64x64 PNG URL |
 | `slimArms` | `{}` | `{"Ada": true}` for the slim (Alex) model when using a PNG URL |
 
-**Costs.** Each decision is one AICord call plus one or more Claude calls. Idle check-ins and reactions add more. Raise `idleThinkSeconds`, or set it to 0, and turn off `reactToResults` to spend less.
+**Costs.** Each decision is one AICord call plus one or more Claude calls if it acts. Check-ins, chatter and joining in on chat each cost one AICord call. Raise `checkInMinutes` and `chatterMinutes`, or turn off `overhearChat`, to spend less.
 
 ## What companions can do
 

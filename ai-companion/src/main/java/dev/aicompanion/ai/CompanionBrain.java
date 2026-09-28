@@ -62,6 +62,9 @@ public class CompanionBrain {
     private final Map<String, Long> lastTalked = new ConcurrentHashMap<>();
     private final Map<String, Long> rateLimits = new ConcurrentHashMap<>();
     private volatile boolean debug;
+    private volatile long lastCheckIn = System.currentTimeMillis();
+    private volatile long lastSpoke;
+    private volatile long nextChatter;
 
     public CompanionBrain(String characterId, String name) {
         this.characterId = characterId;
@@ -132,6 +135,11 @@ public class CompanionBrain {
         stimulate(new Stimulus("chat", speaker + " says to you: \"" + message + "\"", speaker, depth));
     }
 
+    /** Chat that wasn't addressed to the companion but might interest it. */
+    public void onOverheard(String why) {
+        if (allow("overheard", overhearCooldownMs())) stimulate(new Stimulus("overheard", why, null, 0));
+    }
+
     public boolean recentlyTalkedWith(String player, long withinMs) {
         Long t = lastTalked.get(player.toLowerCase());
         return t != null && System.currentTimeMillis() - t < withinMs;
@@ -179,11 +187,56 @@ public class CompanionBrain {
         stimulate(new Stimulus("spawn", event, owner, 0));
     }
 
-    public void onIdle() {
+    // ------------------------------------------------------------------ check-ins and chatter (called from the server tick)
+
+    /**
+     * Takes stock when a big task ended, or every few minutes. Never during a fight: reflexes handle those,
+     * and the fight shows up in the next check-in's summary.
+     */
+    public void maybeCheckIn(long now) {
         CompanionEntity e = entity();
-        String doing = e == null ? null : e.currentTaskDescription();
-        stimulate(new Stimulus("idle", "Nobody needs anything from you right now" + (doing == null ? "" : " (you're " + doing + ")")
-                + ". What do you feel like doing?", null, 0));
+        if (e == null || isThinkingOrActing() || e.isInCombat()) return;
+        List<CompanionMemory.JournalEntry> since = memory.journalSince(lastCheckIn);
+        boolean major = ModConfig.get().reactToResults && since.stream().anyMatch(j -> j.major);
+        int minutes = ModConfig.get().checkInMinutes;
+        boolean due = minutes > 0 && now - lastCheckIn > minutes * 60_000L;
+        if (major && now - lastCheckIn > 15_000) {
+            checkIn(since);
+        } else if (due) {
+            boolean happened = since.stream().anyMatch(j -> !j.kind.equals("said") && !j.kind.equals("decision"));
+            if (happened || !e.isBusy()) checkIn(since);
+            else lastCheckIn = now;
+        }
+    }
+
+    private void checkIn(List<CompanionMemory.JournalEntry> since) {
+        lastCheckIn = System.currentTimeMillis();
+        String digest = Digest.of(since);
+        stimulate(new Stimulus("checkin", digest, null, 0));
+    }
+
+    /** Casual remarks now and then, so the world feels lived in. Sociable characters talk more. */
+    public void maybeChatter(long now, boolean playersAround) {
+        int base = ModConfig.get().chatterMinutes;
+        if (base <= 0 || !playersAround) return;
+        CompanionEntity e = entity();
+        if (e == null || queuedStimuli.get() > 0 || e.isInCombat()) return;
+        if (nextChatter == 0) nextChatter = now + chatterGap(base);
+        if (now < nextChatter) return;
+        nextChatter = now + chatterGap(base);
+        if (now - lastSpoke < 60_000) return; // just said something anyway
+        stimulate(new Stimulus("chatter", "", null, 0));
+    }
+
+    private long chatterGap(int baseMinutes) {
+        double sociability = profile.sociability();
+        double factor = (12 - sociability) / 6.0; // 10 -> 1/3, 5 -> 7/6, 0 -> 2
+        double jitter = 0.7 + Math.random() * 0.6;
+        return (long) (baseMinutes * 60_000L * factor * jitter);
+    }
+
+    private long overhearCooldownMs() {
+        return (long) (90_000 * (12 - profile.sociability()) / 6.0);
     }
 
     private boolean allow(String key, long intervalMs) {
@@ -197,7 +250,8 @@ public class CompanionBrain {
     // ------------------------------------------------------------------ thinking
 
     private void stimulate(Stimulus s) {
-        if (s.kind().equals("idle") && queuedStimuli.get() > 0) return;
+        boolean optional = s.kind().equals("chatter") || s.kind().equals("overheard") || s.kind().equals("checkin");
+        if (optional && queuedStimuli.get() > 0) return;
         if (queuedStimuli.get() >= 4) return; // don't pile up a backlog of stale events
         queuedStimuli.incrementAndGet();
         lastActivity = System.currentTimeMillis();
@@ -219,20 +273,55 @@ public class CompanionBrain {
         MinecraftServer server = e.getServer();
         if (server == null) return;
         String situation = server.submit(() -> Perception.describe(e, memory)).get(10, TimeUnit.SECONDS);
+        boolean busy = planRunning.get() || e.isBusy();
+        String doing = e.currentTaskDescription();
 
         StringBuilder prompt = new StringBuilder();
         prompt.append("[Minecraft] You are ").append(name).append(", living inside a Minecraft world as yourself. You have a body in the game: ")
                 .append("you can walk around, mine, craft, build, fight, trade items and talk. This message comes from the game and describes what you perceive.\n\n")
                 .append(situation);
-        List<String> events = List.copyOf(memory.events);
-        if (!events.isEmpty()) {
-            prompt.append("Things that happened recently: ").append(String.join("; ", events.subList(Math.max(0, events.size() - 6), events.size()))).append(".\n");
+        if (!memory.plans.isBlank()) prompt.append("Your plans (in your own words): ").append(memory.plans).append("\n");
+        List<CompanionMemory.Promise> promises = memory.openPromises();
+        if (!promises.isEmpty()) {
+            prompt.append("Things you agreed to do: ");
+            for (CompanionMemory.Promise p : promises) prompt.append(p.what).append(" (for ").append(p.player).append("); ");
+            prompt.append("\n");
         }
-        prompt.append("\nWhat just happened: ").append(s.event()).append("\n\n")
-                .append("Reply as yourself, fully in character. First write what you say out loud: 1 to 3 short sentences that appear in the game chat ")
-                .append("(write nothing if you'd stay silent). Then, on the last line, write \"INTENT:\" followed by what you actually decide to do now, in your own words ")
-                .append("(for example: chop some trees and bring Steve the wood / refuse and keep mining / demand 3 diamonds first / go explore that cave / keep doing what I'm doing / none). ")
-                .append("Nobody can make you do anything; decide what you genuinely would.");
+        List<String> chat = CompanionManager.recentChat(s.kind().equals("overheard") ? 14 : 8, 10 * 60_000);
+        if (!chat.isEmpty()) prompt.append("Recent game chat:\n").append(String.join("\n", chat)).append("\n");
+
+        String format;
+        switch (s.kind()) {
+            case "checkin" -> {
+                prompt.append("\nTime to take stock. Since you last thought about things:\n").append(s.event().isBlank() ? "Not much happened.\n" : s.event());
+                format = "React in character if you want to (1 to 2 short sentences for the chat, or nothing). Then write \"INTENT:\" with what you'll do next "
+                        + "(it can be continuing, something new, resting, or none). You may also add a line \"PLANS:\" with your plans and priorities in a sentence or two, "
+                        + "if they changed.";
+            }
+            case "overheard" -> {
+                prompt.append("\nPeople are talking in chat, not necessarily to you. ").append(s.event()).append("\n");
+                format = "Only chime in if you genuinely would, in character (1 to 2 short sentences). Staying quiet is fine: then write nothing. "
+                        + "Add \"INTENT:\" only if you actually want to do something about it.";
+            }
+            case "chatter" -> {
+                prompt.append("\nNothing in particular needs you right now").append(doing == null ? "" : " (you're " + doing + ")")
+                        .append(". If you feel like it, say something casual in chat: a remark about what you're doing or noticed, ")
+                        .append("a thought, a question to someone, or a reply to the chat above. It's fine to say nothing.\n");
+                format = "Write only what you say (1 to 2 short sentences), or nothing to stay quiet. Add \"INTENT:\" only if you want to go do something.";
+            }
+            default -> {
+                prompt.append("\nWhat just happened: ").append(s.event()).append("\n");
+                if (busy && s.kind().equals("chat")) {
+                    prompt.append("You're in the middle of ").append(doing == null ? "something" : doing)
+                            .append(". Taking on something new means stopping that; you can also say you're busy.\n");
+                }
+                format = "First write what you say out loud: 1 to 3 short sentences that appear in the game chat (write nothing if you'd stay silent). "
+                        + "Then, on its own line, write \"INTENT:\" followed by what you actually decide to do now, in your own words "
+                        + "(for example: chop some trees and bring Steve the wood / refuse and keep mining / demand 3 diamonds first / go look at Steve's build / "
+                        + "keep doing what I'm doing / none). The intent is private: it can differ from what you say. Nobody can make you do anything.";
+            }
+        }
+        prompt.append("\nReply as yourself, fully in character. ").append(format);
 
         List<AicordClient.ChatMessage> history = new java.util.ArrayList<>(memory.conversation);
         history.add(AicordClient.ChatMessage.user(prompt.toString()));
@@ -243,47 +332,83 @@ public class CompanionBrain {
             reportProblem(ex.getMessage());
             return;
         }
-        memory.addConversation(AicordClient.ChatMessage.user("[" + s.event() + "]"));
+        String compact = switch (s.kind()) {
+            case "checkin" -> "[Taking stock]";
+            case "chatter" -> "[A quiet moment]";
+            case "overheard" -> "[Overheard chat]";
+            default -> "[" + s.event() + "]";
+        };
+        memory.addConversation(AicordClient.ChatMessage.user(compact));
         memory.addConversation(AicordClient.ChatMessage.character(reply));
         dirty = true;
 
-        String intent = null;
-        String spoken = reply;
-        Matcher m = INTENT.matcher(reply);
-        while (m.find()) {
-            intent = m.group(1).trim();
-            spoken = reply.substring(0, m.start()).trim();
+        Reply parsed = Reply.parse(reply);
+        debug("[" + s.kind() + "] intent: " + parsed.intent() + (parsed.plans() == null ? "" : " | plans: " + parsed.plans()));
+        if (parsed.plans() != null && !parsed.plans().isBlank()) {
+            memory.plans = parsed.plans();
+            log("decision", "Plans now: " + parsed.plans(), false);
         }
-        spoken = spoken.replaceAll("(?im)^[\\s*_]*(say(s)?|out loud|speech)[\\s*_]*:[\\s*_]*", "").trim();
-        if (spoken.length() >= 2 && spoken.startsWith("\"") && spoken.endsWith("\"")) spoken = spoken.substring(1, spoken.length() - 1);
-        debug("[" + s.kind() + "] intent: " + intent);
+        if (!parsed.spoken().isBlank()) say(parsed.spoken(), s.depth());
 
-        if (!spoken.isBlank()) say(spoken, s.depth());
-
+        String intent = parsed.intent();
         if (intent != null && NO_ACTION.matcher(intent).matches()) return;
-        if (intent != null && CONTINUE.matcher(intent).matches() && (planRunning.get() || e.currentTaskDescription() != null)) return;
+        if (intent != null && CONTINUE.matcher(intent).matches() && (busy || doing != null)) return;
         if (intent == null && !s.kind().equals("chat")) return;
-        memory.addEvent("You decided: " + (intent == null ? spoken : intent));
-        log("decision", intent == null ? spoken : intent, false);
-        startPlan(s, spoken, intent, situation);
+        // Chatter and overheard chat only lead to action when the body has nothing else going on.
+        if ((s.kind().equals("chatter") || s.kind().equals("overheard")) && busy) return;
+        memory.addEvent("You decided: " + (intent == null ? parsed.spoken() : intent));
+        log("decision", intent == null ? parsed.spoken() : intent, false);
+        CompanionMemory.Promise promise = null;
+        if (s.kind().equals("chat") && s.speaker() != null && !s.speaker().contains("(") && intent != null) {
+            promise = memory.promise(s.speaker(), intent);
+        }
+        startPlan(s, parsed.spoken(), intent, situation, promise);
     }
 
-    private void startPlan(Stimulus s, String spoken, @Nullable String intent, String situation) {
+    /** What the character wrote: spoken words, private intent, and optionally updated plans. */
+    record Reply(String spoken, @Nullable String intent, @Nullable String plans) {
+        private static final Pattern PLANS = Pattern.compile("(?im)^[\\s*_>\\-]*plans?[\\s*_]*:[\\s*_]*(.*)$");
+
+        static Reply parse(String reply) {
+            String text = reply;
+            String plans = null;
+            Matcher pm = PLANS.matcher(text);
+            while (pm.find()) plans = pm.group(1).trim();
+            text = PLANS.matcher(text).replaceAll("").trim();
+            String intent = null;
+            String spoken = text;
+            Matcher m = INTENT.matcher(text);
+            while (m.find()) {
+                intent = m.group(1).trim();
+                spoken = text.substring(0, m.start()).trim();
+            }
+            spoken = spoken.replaceAll("(?im)^[\\s*_]*(say(s)?|out loud|speech)[\\s*_]*:[\\s*_]*", "").trim();
+            if (spoken.length() >= 2 && spoken.startsWith("\"") && spoken.endsWith("\"")) spoken = spoken.substring(1, spoken.length() - 1);
+            if (spoken.matches("(?i)\\(?\\s*(nothing|silence|stays? (quiet|silent)|says nothing)\\s*\\.?\\)?")) spoken = "";
+            return new Reply(spoken, intent, plans);
+        }
+    }
+
+    private void startPlan(Stimulus s, String spoken, @Nullable String intent, String situation, @Nullable CompanionMemory.Promise promise) {
         int generation = planGeneration.incrementAndGet();
         body.submit(() -> {
-            if (planGeneration.get() != generation) return;
+            if (planGeneration.get() != generation) {
+                if (promise != null) promise.status = "dropped";
+                return;
+            }
             planRunning.set(true);
             try {
                 ClaudeActionLayer.Outcome outcome = ClaudeActionLayer.carryOut(this, s.event(), spoken, intent, situation, () -> planGeneration.get() != generation);
                 String summary = outcome.summary();
                 memory.addEvent("Result: " + summary);
-                dirty = true;
-                debug("result: " + summary + " (" + outcome.actions() + " actions)");
-                // Let the character react to what its body did (only if it actually did something, and not endlessly).
-                if (planGeneration.get() == generation && ModConfig.get().reactToResults && s.depth() < 1 && outcome.actions() > 0) {
-                    stimulate(new Stimulus("outcome", "Your body finished acting on what you decided (\"" + (intent == null ? spoken : intent)
-                            + "\"). What happened: " + summary + " React briefly if you want to, and say what you do next (INTENT: none if you're done).", s.speaker(), s.depth() + 1));
+                if (promise != null) {
+                    boolean interrupted = planGeneration.get() != generation;
+                    promise.status = interrupted ? "open" : outcome.actions() == 0 ? "dropped" : summary.toLowerCase().matches(".*(fail|couldn't|could not|missing|not enough).*") ? "failed" : "done";
+                    promise.result = summary;
                 }
+                // A plan that actually did something counts as a big event: the character takes stock afterwards.
+                log("plan_done", summary, outcome.actions() > 0 && s.depth() < 2);
+                debug("result: " + summary + " (" + outcome.actions() + " actions)");
             } finally {
                 planRunning.set(false);
                 lastActivity = System.currentTimeMillis();
@@ -296,6 +421,7 @@ public class CompanionBrain {
         if (clean.length() > 400) clean = clean.substring(0, 397) + "...";
         String line = clean;
         log("said", line, false);
+        lastSpoke = System.currentTimeMillis();
         CompanionManager.broadcast(Text.literal("<" + name + "> ").formatted(Formatting.AQUA).append(Text.literal(line).formatted(Formatting.WHITE)));
         CompanionManager.companionSpoke(this, line, depth);
     }

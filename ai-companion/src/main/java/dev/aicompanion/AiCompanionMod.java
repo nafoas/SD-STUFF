@@ -59,6 +59,10 @@ public class AiCompanionMod implements ModInitializer {
             }
         });
 
+        ServerMessageEvents.GAME_MESSAGE.register((server, message, overlay) -> {
+            if (!overlay) CompanionManager.onGameMessage(message);
+        });
+
         ServerMessageEvents.CHAT_MESSAGE.register((message, sender, params) ->
                 CompanionManager.onPlayerChat(sender, message.getSignedContent()));
 

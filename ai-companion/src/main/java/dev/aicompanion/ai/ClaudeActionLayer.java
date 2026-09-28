@@ -137,6 +137,7 @@ public final class ClaudeActionLayer {
                 a stair roof overhanging the walls by one block, a door, and torches or lanterns inside and out. Avoid plain one-material cubes unless %1$s is lazy or sloppy.
                 - Coordinates: +x is east, -z is north, +y is up. dy 0 is the ground level the body stands on.
                 - Doors and beds: place only the lower half / foot (e.g. oak_door[facing=south,half=lower], red_bed[facing=north,part=foot]); the other half is added automatically.
+                - When someone asks you to look at their build, go there and use inspect_build; the report goes back to %1$s, who'll have an opinion.
                 - Stairs: oak_stairs[facing=north] has its tall back side toward the north. For a roof, rows of stairs step up toward the ridge, facing inward toward it.
                 """.formatted(name, profile.describe(), mischiefRule());
     }
@@ -150,6 +151,7 @@ public final class ClaudeActionLayer {
 
     public static Outcome carryOut(CompanionBrain brain, String event, String spoken, String intent, String situation, BooleanSupplier cancelled) {
         String userText = "Situation report:\n" + situation
+                + (brain.memory().plans.isBlank() ? "" : "\n" + brain.name() + "'s current plans: " + brain.memory().plans)
                 + "\nWhat just happened: " + event
                 + "\n" + brain.name() + " said out loud: " + (spoken.isBlank() ? "(nothing)" : spoken)
                 + "\n" + (intent == null

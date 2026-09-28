@@ -109,6 +109,9 @@ public final class Actions {
         specs.add(new Spec("recall", "Look things up in memory without walking anywhere: which chests hold an item, known places, resources you've seen and where, and things you built. "
                 + "Give an item/resource name to search for it, or omit to get an overview.",
                 Map.of("query", str("Item, resource or place to look for (optional)")), List.of()));
+        specs.add(new Spec("inspect_build", "Take a good look at a build: walks over if needed and reports its size, materials and what's in it, "
+                + "so the character can have an opinion. Target a player (their build around them) or coordinates.",
+                Map.of("player", str("Look at the build around this player"), "x", num("X"), "y", num("Y"), "z", num("Z")), List.of()));
         specs.add(new Spec("allow_chest_access", "Record that a player said you may (or may no longer) take things from their chests. Only when they clearly said so.",
                 Map.of("player", str("Player name"), "allowed", Map.of("type", "boolean")), List.of("player", "allowed")));
         specs.add(new Spec("equip", "Hold an item from the inventory in the main hand.", Map.of("item", str("Item id")), List.of("item")));
@@ -252,7 +255,8 @@ public final class Actions {
                     CompanionMemory.Location loc = brain.memory().places.get(place);
                     if (loc == null) throw new ActionError("No remembered place called '" + place + "'. Known: " + String.join(", ", brain.memory().places.keySet()));
                     if (!loc.dimension.equals(c.getWorld().getRegistryKey().getValue().toString())) throw new ActionError(place + " is in another dimension.");
-                    target = new Vec3d(loc.x + 0.5, loc.y, loc.z + 0.5);
+                    int y = loc.y == CompanionMemory.UNKNOWN_Y ? c.getWorld().getTopY(net.minecraft.world.Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, loc.x, loc.z) : loc.y;
+                    target = new Vec3d(loc.x + 0.5, y, loc.z + 0.5);
                     label = place;
                 } else if (in.has("x") && in.has("z")) {
                     int x = integer(in, "x", 0), z = integer(in, "z", 0);
@@ -330,6 +334,14 @@ public final class Actions {
                 Item item = in.has("item") && !in.get("item").getAsString().isBlank() ? item(in, "item") : null;
                 BlockPos at = in.has("x") && in.has("y") && in.has("z") ? new BlockPos(integer(in, "x", 0), integer(in, "y", 0), integer(in, "z", 0)) : null;
                 c.startTask(new ChestTask(deposit, item, integer(in, "count", 0), at, in.has("label") ? in.get("label").getAsString() : ""), done);
+            }
+            case "inspect_build" -> {
+                BlockPos at;
+                if (in.has("player")) at = player(c, string(in, "player")).getBlockPos();
+                else if (in.has("x") && in.has("z")) at = new BlockPos(integer(in, "x", 0), integer(in, "y", c.getBlockY()), integer(in, "z", 0));
+                else at = c.getBlockPos();
+                BlockPos target = at;
+                c.startTask(new dev.aicompanion.game.tasks.InspectTask(target), done);
             }
             case "recall" -> done.complete(MemoryReport.recall(brain.memory(), c, in.has("query") ? in.get("query").getAsString() : ""));
             case "allow_chest_access" -> {

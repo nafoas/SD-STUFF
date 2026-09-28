@@ -11,6 +11,8 @@ import net.minecraft.world.gen.structure.Structure;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -89,6 +91,74 @@ public final class BuildAwareness {
         // The whole build shares one verdict.
         for (BlockPos p : seen) CACHE.put(p.asLong(), new Cached(verdict, now));
         return verdict;
+    }
+
+    /** A player-style look at the build around pos: how big, what it's made of, and what's in it. */
+    public static String describe(ServerWorld world, BlockPos around) {
+        BlockOwnership owners = BlockOwnership.get(world);
+        BlockPos start = null;
+        double best = Double.MAX_VALUE;
+        for (BlockPos p : BlockPos.iterate(around.add(-8, -4, -8), around.add(8, 8, 8))) {
+            if (isCrafted(world.getBlockState(p)) && p.getSquaredDistance(around) < best) {
+                best = p.getSquaredDistance(around);
+                start = p.toImmutable();
+            }
+        }
+        if (start == null) return "There's no build here, just natural terrain.";
+        Set<BlockPos> seen = new HashSet<>();
+        ArrayDeque<BlockPos> queue = new ArrayDeque<>();
+        queue.add(start);
+        seen.add(start);
+        Map<String, Integer> materials = new HashMap<>();
+        Map<String, Integer> features = new HashMap<>();
+        Map<String, Integer> builders = new HashMap<>();
+        int minX = Integer.MAX_VALUE, minY = Integer.MAX_VALUE, minZ = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE, maxY = Integer.MIN_VALUE, maxZ = Integer.MIN_VALUE;
+        while (!queue.isEmpty() && seen.size() < 6000) {
+            BlockPos p = queue.poll();
+            BlockState s = world.getBlockState(p);
+            String id = Registries.BLOCK.getId(s.getBlock()).getPath();
+            minX = Math.min(minX, p.getX()); maxX = Math.max(maxX, p.getX());
+            minY = Math.min(minY, p.getY()); maxY = Math.max(maxY, p.getY());
+            minZ = Math.min(minZ, p.getZ()); maxZ = Math.max(maxZ, p.getZ());
+            boolean bedHead = s.getBlock() instanceof BedBlock && s.get(net.minecraft.state.property.Properties.BED_PART) == net.minecraft.block.enums.BedPart.HEAD;
+            String feature = bedHead ? null : s.getBlock() instanceof BedBlock ? "bed" : id.contains("chest") || id.contains("barrel") ? "storage"
+                    : s.isIn(BlockTags.DOORS) ? "door" : id.contains("glass") ? "window" : id.contains("torch") || id.contains("lantern") || id.contains("lamp") ? "light"
+                    : id.contains("furnace") || id.contains("crafting") || id.contains("smoker") || id.contains("anvil") ? "workstation"
+                    : s.isIn(BlockTags.STAIRS) ? "stairs" : id.contains("ladder") ? "ladder" : id.contains("flower_pot") || s.isIn(BlockTags.FLOWERS) ? "plants" : null;
+            if (feature != null) features.merge(feature, 1, Integer::sum);
+            materials.merge(id, 1, Integer::sum);
+            String o = owners.owner(p);
+            if (o != null) builders.merge(o.startsWith(BlockOwnership.COMPANION_PREFIX) ? "a companion" : o, 1, Integer::sum);
+            for (int dx = -1; dx <= 1; dx++)
+                for (int dy = -1; dy <= 1; dy++)
+                    for (int dz = -1; dz <= 1; dz++) {
+                        BlockPos n = p.add(dx, dy, dz);
+                        if (!seen.contains(n) && isStructural(world, n, owners)) {
+                            seen.add(n);
+                            queue.add(n);
+                        }
+                    }
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("A build of about ").append(seen.size()).append(" blocks, ").append(maxX - minX + 1).append(" x ").append(maxZ - minZ + 1)
+                .append(" wide and ").append(maxY - minY + 1).append(" tall. ");
+        List<Map.Entry<String, Integer>> top = new ArrayList<>(materials.entrySet());
+        top.sort(Map.Entry.<String, Integer>comparingByValue().reversed());
+        List<String> mats = new ArrayList<>();
+        for (Map.Entry<String, Integer> m : top.subList(0, Math.min(6, top.size()))) mats.add(m.getKey().replace('_', ' '));
+        sb.append("Mostly ").append(String.join(", ", mats)).append(" (").append(materials.size()).append(" kinds of block). ");
+        if (!features.isEmpty()) {
+            List<String> f = new ArrayList<>();
+            features.forEach((k, v) -> f.add(v + " " + k + (v > 1 ? "s" : "")));
+            sb.append("Has ").append(String.join(", ", f)).append(". ");
+        }
+        if (!builders.isEmpty()) {
+            String who = builders.entrySet().stream().max(Map.Entry.comparingByValue()).get().getKey();
+            sb.append("Built mostly by ").append(who).append(". ");
+        } else if (inGeneratedStructure(world, start)) {
+            sb.append("It's a naturally generated structure. ");
+        }
+        return sb.toString().trim();
     }
 
     /** Forget cached verdicts near a block that changed. */

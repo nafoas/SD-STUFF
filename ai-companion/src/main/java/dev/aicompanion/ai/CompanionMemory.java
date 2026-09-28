@@ -15,6 +15,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * Touched by the server, mind and body threads, so collections are concurrent (see {@link #makeThreadSafe()}).
  */
 public class CompanionMemory {
+    /** Height of a place heard about in chat with only x and z. */
+    public static final int UNKNOWN_Y = -9999;
+
     public static class Location {
         public String dimension;
         public int x, y, z;
@@ -66,6 +69,16 @@ public class CompanionMemory {
         public long seen;
     }
 
+    /** Something the character agreed to do for a player. */
+    public static class Promise {
+        public String player;
+        public String what;
+        public long made;
+        /** open, done, failed, dropped */
+        public String status = "open";
+        public String result = "";
+    }
+
     public static class Structure {
         public String label;
         public String purpose = "";
@@ -88,6 +101,9 @@ public class CompanionMemory {
     /** Resources and creatures it has seen, by name (iron_ore, oak_log, sheep, village...). */
     public Map<String, List<Sighting>> sightings = new LinkedHashMap<>();
     public List<Structure> structures = new ArrayList<>();
+    public List<Promise> promises = new ArrayList<>();
+    /** The character's own words on what it's planning and what matters to it right now (updated at check-ins). */
+    public String plans = "";
     /** Players (lowercase) who said the companion may take things from their chests. */
     public Set<String> chestPermissions = ConcurrentHashMap.newKeySet();
 
@@ -107,6 +123,8 @@ public class CompanionMemory {
         if (sightings != null) sightings.forEach((k, v) -> s.put(k, new CopyOnWriteArrayList<>(v)));
         sightings = s;
         structures = new CopyOnWriteArrayList<>(structures == null ? List.of() : structures);
+        promises = new CopyOnWriteArrayList<>(promises == null ? List.of() : promises);
+        if (plans == null) plans = "";
         Set<String> perms = ConcurrentHashMap.newKeySet();
         if (chestPermissions != null) perms.addAll(chestPermissions);
         chestPermissions = perms;
@@ -213,6 +231,22 @@ public class CompanionMemory {
     public void forgetSighting(String kind, String dimension, int x, int y, int z) {
         List<Sighting> list = sightings.get(kind);
         if (list != null) list.removeIf(s -> s.dimension.equals(dimension) && Math.abs(s.x - x) + Math.abs(s.y - y) + Math.abs(s.z - z) < 12);
+    }
+
+    public Promise promise(String player, String what) {
+        Promise p = new Promise();
+        p.player = player;
+        p.what = what;
+        p.made = System.currentTimeMillis();
+        promises.add(p);
+        while (promises.size() > 20) promises.remove(0);
+        return p;
+    }
+
+    public List<Promise> openPromises() {
+        List<Promise> out = new ArrayList<>();
+        for (Promise p : promises) if (p.status.equals("open")) out.add(p);
+        return out;
     }
 
     public void addStructure(Structure s) {

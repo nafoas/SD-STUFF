@@ -79,6 +79,11 @@ public abstract class Task {
         if (--repathCooldown <= 0 || c.getNavigation().isIdle()) {
             repathCooldown = 20;
             Path path = c.getNavigation().findPathTo(BlockPos.ofFloored(target), Math.max(0, (int) within - 1));
+            if ((path == null || path.getLength() <= 1) && distance < 2.5) {
+                // Right next to it (a step down into a tunnel, one block over): just step there.
+                c.getMoveControl().moveTo(target.x, target.y, target.z, c.workSpeed());
+                return Move.MOVING;
+            }
             if (path == null) {
                 if (ticksSinceProgress > 40) {
                     lastTarget = null;

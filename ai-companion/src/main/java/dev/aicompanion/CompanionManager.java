@@ -170,9 +170,120 @@ public final class CompanionManager {
         s.execute(() -> s.getPlayerManager().broadcast(text, false));
     }
 
+    // ------------------------------------------------------------------ chat log (everything said on the server)
+
+    private record ChatLine(long time, String text) {}
+
+    private static final java.util.Deque<ChatLine> CHAT_LOG = new java.util.concurrent.ConcurrentLinkedDeque<>();
+    private static final Pattern COORDS3 = Pattern.compile("(-?\\d{1,7})\\s*[, ]\\s*(-?\\d{1,3})\\s*[, ]\\s*(-?\\d{1,7})");
+    private static final Pattern COORDS2 = Pattern.compile("(?i)(?:\\bat\\b|coords?|@|x)\\s*:?\\s*(-?\\d{1,7})\\s*[, ]\\s*(?:z\\s*:?\\s*)?(-?\\d{1,7})\\b");
+    private static final Pattern PLACE_NAME = Pattern.compile("(?i)(?:\\b(my|our|the|a|his|her|their)\\s+)?([a-z][a-z' ]{1,30}?)\\s+(?:is\\s+|are\\s+)?(?:at|@|:|coords)\\s*:?\\s*$");
+    private static final java.util.Set<String> INTEREST_WORDS = java.util.Set.of("base", "house", "home", "build", "built", "village", "diamond",
+            "diamonds", "castle", "farm", "mine", "cave", "tower", "help", "anyone", "someone", "everyone", "who wants", "come see", "check out", "look at");
+
+    private static void recordChat(String text) {
+        CHAT_LOG.addLast(new ChatLine(System.currentTimeMillis(), text));
+        while (CHAT_LOG.size() > 120) CHAT_LOG.pollFirst();
+    }
+
+    /** The last lines of server chat (players, companions, joins, deaths) within maxAgeMs, oldest first. */
+    public static List<String> recentChat(int lines, long maxAgeMs) {
+        long cutoff = System.currentTimeMillis() - maxAgeMs;
+        List<ChatLine> all = new ArrayList<>(CHAT_LOG);
+        List<String> out = new ArrayList<>();
+        java.text.SimpleDateFormat fmt = new java.text.SimpleDateFormat("HH:mm");
+        for (ChatLine l : all.subList(Math.max(0, all.size() - lines), all.size())) {
+            if (l.time() >= cutoff) out.add("[" + fmt.format(new java.util.Date(l.time())) + "] " + l.text());
+        }
+        return out;
+    }
+
+    private static int chatLinesSince(long ms) {
+        long cutoff = System.currentTimeMillis() - ms;
+        int n = 0;
+        for (ChatLine l : CHAT_LOG) if (l.time() >= cutoff) n++;
+        return n;
+    }
+
+    /** System messages: joins, leaves, deaths, advancements, and companions' own lines. */
+    public static void onGameMessage(Text message) {
+        String text = message.getString();
+        if (text.isBlank() || text.startsWith("[AI Companion]")) return;
+        recordChat(text);
+        java.util.regex.Matcher joined = Pattern.compile("^(\\S+) joined the game$").matcher(text);
+        if (joined.find() && ModConfig.get().overhearChat) {
+            for (CompanionBrain brain : BRAINS.values()) {
+                if (brain.entity() != null && brain.profile().sociability() >= 5) brain.onOverheard(joined.group(1) + " just joined the game.");
+            }
+        }
+    }
+
+    /** Coordinates mentioned in chat become points of interest the companion can visit later. */
+    private static void notePointOfInterest(CompanionBrain brain, String speaker, String message) {
+        java.util.regex.Matcher m3 = COORDS3.matcher(message);
+        java.util.regex.Matcher m2 = COORDS2.matcher(message);
+        int x, y, z;
+        int start;
+        if (m3.find()) {
+            x = Integer.parseInt(m3.group(1));
+            y = Integer.parseInt(m3.group(2));
+            z = Integer.parseInt(m3.group(3));
+            start = m3.start();
+        } else if (m2.find()) {
+            x = Integer.parseInt(m2.group(1));
+            y = dev.aicompanion.ai.CompanionMemory.UNKNOWN_Y;
+            z = Integer.parseInt(m2.group(2));
+            start = m2.start();
+        } else {
+            return;
+        }
+        if (Math.abs(x) < 3 && Math.abs(z) < 3) return; // "2 3 4" in normal speech is rarely a location
+        String before = message.substring(0, start);
+        java.util.regex.Matcher nm = PLACE_NAME.matcher(before);
+        String name;
+        if (nm.find()) {
+            String owner = nm.group(1) == null ? "" : nm.group(1).toLowerCase();
+            String noun = nm.group(2).trim().toLowerCase();
+            name = (owner.equals("my") || owner.equals("our") ? speaker.toLowerCase() + "'s " : "") + noun;
+        } else {
+            name = "spot " + speaker.toLowerCase() + " mentioned";
+        }
+        CompanionEntity e = brain.entity();
+        String dim = e == null ? "minecraft:overworld" : e.getWorld().getRegistryKey().getValue().toString();
+        var existing = brain.memory().places.get(name);
+        if (existing != null && !existing.type.equals("poi")) name = name + " (from chat)";
+        var loc = new dev.aicompanion.ai.CompanionMemory.Location(dim, x, y, z);
+        loc.type = "poi";
+        loc.note = speaker + " said: " + message;
+        brain.memory().places.put(name, loc);
+        brain.log("discovery", "Heard about '" + name + "' at " + x + ", " + (y == dev.aicompanion.ai.CompanionMemory.UNKNOWN_Y ? "?" : y) + ", " + z + " from " + speaker, false);
+    }
+
+    /** Decides whether chat not addressed to a companion is interesting enough for it to consider joining in. */
+    private static void considerOverhearing(CompanionBrain brain, CompanionEntity e, ServerPlayerEntity sender, String message) {
+        String lower = message.toLowerCase();
+        int score = 0;
+        if (COORDS3.matcher(message).find() || COORDS2.matcher(message).find()) score += 2;
+        for (String place : brain.memory().places.keySet()) if (lower.contains(place)) { score += 2; break; }
+        int interests = 0;
+        for (String w : INTEREST_WORDS) if (lower.contains(w)) interests++;
+        for (String activity : brain.profile().favoriteActivities()) {
+            for (String w : activity.toLowerCase().split("\\W+")) if (w.length() > 3 && lower.contains(w)) interests++;
+        }
+        score += Math.min(3, interests);
+        if (lower.contains("?")) score++;
+        if (chatLinesSince(60_000) >= 4) score++; // a lively conversation
+        if (e.getWorld() == sender.getWorld() && e.squaredDistanceTo(sender) < 24 * 24) score++;
+        int sociability = brain.profile().sociability();
+        if (sociability >= 7) score++;
+        if (sociability <= 3) score--;
+        if (score >= 3) brain.onOverheard("The latest message was from " + sender.getName().getString() + ".");
+    }
+
     /** A player said something in chat. Called on the server thread. */
     public static void onPlayerChat(ServerPlayerEntity sender, String message) {
         String player = sender.getName().getString();
+        recordChat("<" + player + "> " + message);
         List<CompanionBrain> named = new ArrayList<>();
         for (CompanionBrain brain : BRAINS.values()) {
             if (brain.entity() != null && mentions(message, brain.name())) named.add(brain);
@@ -195,11 +306,13 @@ public final class CompanionManager {
             if (nearest != null) targets.add(nearest);
         }
         int hearing = ModConfig.get().hearingRadius;
-        for (CompanionBrain brain : targets) {
+        for (CompanionBrain brain : BRAINS.values()) {
             CompanionEntity e = brain.entity();
             if (e == null) continue;
             if (hearing > 0 && (e.getWorld() != sender.getWorld() || e.squaredDistanceTo(sender) > hearing * hearing)) continue;
-            brain.onChat(player, message, 0);
+            notePointOfInterest(brain, player, message);
+            if (targets.contains(brain)) brain.onChat(player, message, 0);
+            else if (ModConfig.get().overhearChat) considerOverhearing(brain, e, sender, message);
         }
     }
 
@@ -224,17 +337,17 @@ public final class CompanionManager {
         tickCounter++;
         if (tickCounter % 40 == 0) {
             long now = System.currentTimeMillis();
-            int idleSeconds = ModConfig.get().idleThinkSeconds;
             for (CompanionBrain brain : BRAINS.values()) {
                 CompanionEntity e = brain.entity();
                 if (e == null || !e.isAlive()) continue;
                 var p = brain.profile();
-                // Idle check-in: restless characters get bored sooner.
-                if (idleSeconds > 0 && !brain.isThinkingOrActing() && !e.isBusy()) {
-                    double restlessness = (p.curiosity() + p.diligence() + p.sociability()) / 30.0;
-                    long interval = (long) (idleSeconds * 1000 * (1.5 - restlessness));
-                    if (now - brain.lastActivity() > interval) brain.onIdle();
+                brain.maybeCheckIn(now);
+                boolean playersAround = false;
+                for (ServerPlayerEntity pl : s.getPlayerManager().getPlayerList()) {
+                    if (pl.getWorld() == e.getWorld() && pl.squaredDistanceTo(e) < 48 * 48) playersAround = true;
                 }
+                if (p.sociability() >= 8 && !s.getPlayerManager().getPlayerList().isEmpty()) playersAround = true;
+                brain.maybeChatter(now, playersAround);
                 // Sociable characters greet players who walk up to them.
                 java.util.Set<String> before = NEARBY.getOrDefault(brain.id(), java.util.Set.of());
                 java.util.Set<String> now2 = new java.util.HashSet<>();

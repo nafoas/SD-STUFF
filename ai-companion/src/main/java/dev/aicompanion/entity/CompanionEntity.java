@@ -220,6 +220,11 @@ public class CompanionEntity extends PathAwareEntity {
         return task == null ? null : task.describe();
     }
 
+    /** Fighting or running from something right now (reflexes are in charge). */
+    public boolean isInCombat() {
+        return combatTarget != null || fleeTicks > 0;
+    }
+
     public boolean isBusy() {
         return task != null && !task.isContinuous();
     }
