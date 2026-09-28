@@ -30,8 +30,10 @@ public final class Goals {
         @Nullable public String parent;
         /** active, done, dropped */
         public String status = "active";
-        /** "self", or the player who asked for it */
+        /** "self", "need", or the player who asked for it */
         public String from = "self";
+        /** For needs: which one (food, pickaxe, torches, bag, sleep, shelter). */
+        @Nullable public String need;
         /** Blocks its parent until done (a tool that broke, missing materials...). */
         public boolean blocker;
         /** Optional check that tells when it's achieved, however that happens. */
@@ -169,7 +171,8 @@ public final class Goals {
     private static void appendTree(CompanionMemory m, Goal g, int depth, StringBuilder sb) {
         sb.append("  ".repeat(depth)).append("- [").append(g.id).append(", ").append(g.horizon).append(", importance ").append(g.importance).append("] ")
                 .append(g.title);
-        if (!g.from.equals("self")) sb.append(" (for ").append(g.from).append(")");
+        if (g.from.equals("need")) sb.append(" (need)");
+        else if (!g.from.equals("self")) sb.append(" (for ").append(g.from).append(")");
         if (g.condition != null) sb.append(" {done when: ").append(g.condition.describe()).append("}");
         if (isBlocked(m, g)) sb.append(" (waiting on a sub-goal)");
         if (!g.progress.isBlank()) sb.append(" - ").append(g.progress);
@@ -271,11 +274,11 @@ public final class Goals {
             if (isBlocked(m, g) || hasActiveChildren(m, g)) continue; // work on the leaves; sub-goals come first
             // A step toward something important matters almost as much as the thing itself.
             int importance = g.importance;
-            boolean promise = !g.from.equals("self");
+            boolean promise = !g.from.equals("self") && !g.from.equals("need");
             Goal up = find(m, g.parent);
             for (int i = 0; up != null && i < 6; i++, up = find(m, up.parent)) {
                 importance = Math.max(importance, up.importance - 1);
-                if (!up.from.equals("self")) promise = true;
+                if (!up.from.equals("self") && !up.from.equals("need")) promise = true;
             }
             double score = importance;
             String why = "importance " + importance;
@@ -287,8 +290,8 @@ public final class Goals {
                 score += 6;
                 why += ", blocking " + (g.parent == null ? "something" : g.parent);
             }
-            // Today's plan decides how goals and free time trade off.
-            double dayWeight = switch (day) {
+            // Today's plan decides how goals and free time trade off (needs don't take days off).
+            double dayWeight = g.need != null ? 1.0 : switch (day) {
                 case "work" -> g.horizon.equals("long") ? 0.8 : 1.2;
                 case "goals" -> g.horizon.equals("short") && !g.blocker ? 1.0 : 1.4;
                 case "free" -> promise || g.blocker || g.importance >= 9 ? 0.9 : 0.3;

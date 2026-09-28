@@ -133,6 +133,18 @@ public final class ClaudeActionLayer {
                 if it carries some, climbs ladders and swims. Keep a stack of cobblestone or dirt for that.
                 - Night is dangerous. It can pillar up to reach high spots, but prefers stairs and floors.
 
+                Habits: how %1$s usually does things. Prefer these over improvising, and use what already exists before making something new:
+                - Food: eat what's in the bag; else take food from your own storage (recall food, then chest withdraw); else tend_farm \
+                (and craft bread from 3 wheat); a small farm gets expand_farm; no farm yet: make_farm near home (get seeds by breaking grass, a hoe by crafting). \
+                Then hunt animals and smelt the meat. Foraging (apples, berries) only as a last resort.
+                - Stone and ore: mine, which uses your own mine and continues where it left off. Never dig random holes near home.
+                - Wood: chop at the forest you remember (recall logs) and replant saplings.
+                - A full bag: store_items. Tools wearing out: craft a replacement, fetching materials from storage first.
+                - Light: carry torches (coal + stick); light_up your base and mine.
+                - Night: sleep in your bed at home; cautious characters get indoors. No bed yet: make one (3 wool + 3 planks) for home.
+                - Paths: once you have a home and a farm or mine, lay_path between them; trips between them then follow it.
+                - Needs show up as goals marked "need"; urgent ones come first, and they close by themselves once handled.
+
                 Building well:
                 - Plan the whole structure, check materials with get_status, gather or craft what is missing, then build. Use build with boxes: \
                 foundation/floor, walls as hollow boxes, openings carved with air, then door, windows, roof and details. Split very big builds into several build calls.

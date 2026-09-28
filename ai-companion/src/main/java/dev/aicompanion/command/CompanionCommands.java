@@ -103,6 +103,12 @@ public final class CompanionCommands {
                     ctx.getSource().sendFeedback(() -> Text.literal(sb.toString()), false);
                     return 1;
                 })));
+        root.then(literal("sethunger").requires(src -> src.hasPermissionLevel(2))
+                .then(argument("value", com.mojang.brigadier.arguments.IntegerArgumentType.integer(0, 20))
+                        .then(argument("name", StringArgumentType.greedyString()).suggests(ACTIVE).executes(ctx -> withBody(ctx, (brain, e) -> {
+                            e.setFood(com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "value"));
+                            ctx.getSource().sendFeedback(() -> Text.literal(brain.name() + "'s hunger is now " + e.getFood() + "/20."), false);
+                        })))));
         root.then(literal("reload").requires(src -> src.hasPermissionLevel(2)).executes(ctx -> {
             ModConfig.load();
             ctx.getSource().sendFeedback(() -> Text.literal("Reloaded config/ai-companion.json."), true);

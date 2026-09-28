@@ -99,6 +99,7 @@ Companions look at the blocks around them the way a player would. There's nothin
 | `/companion log <name>` | Its recent activity log |
 | `/companion memory <name>` | Places, chests and resources it remembers |
 | `/companion reinterview <name>` | Rebuild the profile from a fresh self-description |
+| `/companion sethunger <0-20> <name>` | Set a companion's hunger (for testing; ops only) |
 | `/companion checkblock <x y z>` | Why companions would or wouldn't break a block (who placed it, whose build it's part of) |
 | `/companion debug <name>` | Show its decisions and actions to its owner in chat |
 | `/companion reload` | Reload the config |
@@ -141,6 +142,24 @@ Profiles are saved in `config/ai-companion/profiles/<id>.json`, and you can edit
 - **Monsters** target companions the way they target players (not endermen or piglins, which only fight back).
 - **Threat awareness.** Companions notice monsters coming for them before they're hit. When outnumbered, the less brave ones fall back to their owner. Brave ones rush archers, and cautious ones get out of their line of sight. They raise a shield if they carry one.
 - **Dying.** A companion comes back on its own after a short wait: at its home if it has one, otherwise next to its owner. Getting its things back becomes a goal, urgent for brave characters and less so for timid ones. It walks back and picks them up before they vanish, about 5 minutes after death.
+
+## Needs and habits
+
+- **Needs.** Plain code checks these every few seconds:
+  - **Hunger:** like a player's, it drains with work. It eats when peckish, only heals when well fed, and starves slowly. Rotten flesh is a last resort.
+  - **A pickaxe:** replaced before it wears out.
+  - **Torches:** it makes more when running low.
+  - **Bag space:** it empties the bag when it's nearly full.
+  - **Night:** it sleeps in its own bed. Cautious characters without a bed head home.
+
+  Each need becomes a goal with a matching urgency. Urgent ones cut free time short, and each closes by itself once handled, however that happened.
+- **Habits, meaning how it normally does things, built in as routines:**
+  - **Food:** its **farm** comes first. It tends it (harvest, replant, fill gaps), expands it, or makes one near home with a water source when it has a bucket. Then storage, then hunting and cooking. Foraging is the last resort.
+  - **Stone and ore:** **its own mine** near home. That's a staircase down with torches, then a main tunnel with side branches at the right depth for the ore it wants. It digs out ore it sees in the walls, and every trip continues where the last one stopped.
+  - **Storage:** it sorts its bag into chests labeled by kind (ores, stone, wood, food, tools, farming, mob drops, misc), keeping its working kit. When it runs out of chests it crafts more, from logs if it has to. It remembers what's in every chest.
+  - **Sleep:** in its own bed at night.
+  - **Paths:** it lays a dirt path between its places (home, farm, mine), and trips between them follow it.
+  - **Light:** it places torches on dark spots around its base and mine.
 
 ## What companions can do
 

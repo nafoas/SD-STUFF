@@ -39,7 +39,8 @@ public final class Perception {
 
         BlockPos pos = c.getBlockPos();
         sb.append("You: at ").append(pos.getX()).append(", ").append(pos.getY()).append(", ").append(pos.getZ())
-                .append(", health ").append(Math.round(c.getHealth())).append("/").append(Math.round(c.getMaxHealth()));
+                .append(", health ").append(Math.round(c.getHealth())).append("/").append(Math.round(c.getMaxHealth()))
+                .append(", hunger ").append(c.getFood()).append("/20").append(c.getFood() <= 6 ? " (starving)" : c.getFood() <= 12 ? " (hungry)" : "");
         if (world.isSkyVisible(pos.up())) sb.append(", outdoors");
         else if (pos.getY() < world.getSeaLevel() - 8) sb.append(", underground");
         sb.append(". Holding: ").append(c.getMainHandStack().isEmpty() ? "nothing" : Ids.name(c.getMainHandStack().getItem()));

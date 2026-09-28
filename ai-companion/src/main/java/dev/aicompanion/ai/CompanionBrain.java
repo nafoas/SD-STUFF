@@ -323,6 +323,90 @@ public class CompanionBrain {
         }
     }
 
+    // ------------------------------------------------------------------ needs (server thread, every few seconds)
+
+    /**
+     * Looks at the body's needs (hunger, a pickaxe, torches, bag space, night) and keeps one goal per need at an
+     * importance that matches how pressing it is. The goal closes when the need goes away, however that happened.
+     */
+    public void checkNeeds() {
+        CompanionEntity e = entity();
+        if (e == null) return;
+        PersonaProfile p = profile;
+        java.util.Map<String, Integer> urgency = new java.util.HashMap<>();
+        java.util.Map<String, String> titles = new java.util.HashMap<>();
+
+        int food = e.getFood();
+        if (!e.hasFood() && food <= 12) {
+            urgency.put("food", food <= 4 ? 10 : food <= 8 ? 8 : 6);
+            titles.put("food", food <= 6 ? "find something to eat (starving)" : "get food (getting hungry, nothing to eat)");
+        }
+        int pickaxes = 0;
+        float bestPickLeft = 0;
+        for (int i = 0; i < e.getInventory().size(); i++) {
+            net.minecraft.item.ItemStack s = e.getInventory().getStack(i);
+            if (s.getItem() instanceof net.minecraft.item.PickaxeItem) {
+                pickaxes++;
+                bestPickLeft = Math.max(bestPickLeft, 1f - (float) s.getDamage() / s.getMaxDamage());
+            }
+        }
+        if (e.getMainHandStack().getItem() instanceof net.minecraft.item.PickaxeItem) {
+            pickaxes++;
+            bestPickLeft = Math.max(bestPickLeft, 1f - (float) e.getMainHandStack().getDamage() / e.getMainHandStack().getMaxDamage());
+        }
+        if (pickaxes == 1 && bestPickLeft < 0.1f) {
+            urgency.put("pickaxe", 5);
+            titles.put("pickaxe", "make a spare pickaxe (this one's nearly worn out)");
+        } else if (pickaxes == 0 && !memory.mines.isEmpty()) {
+            urgency.put("pickaxe", 6);
+            titles.put("pickaxe", "make a pickaxe (has none)");
+        }
+        if (e.count(net.minecraft.item.Items.TORCH) < 4 && !memory.mines.isEmpty()) {
+            urgency.put("torches", 4);
+            titles.put("torches", "make torches (running low)");
+        }
+        int free = 0;
+        for (int i = 0; i < e.getInventory().size(); i++) if (e.getInventory().getStack(i).isEmpty()) free++;
+        if (free <= 3) {
+            urgency.put("bag", free <= 1 ? 8 : 6);
+            titles.put("bag", "put things away in storage (bag nearly full)");
+        }
+        if (e.getWorld().isNight() && !e.isSleeping()) {
+            if (dev.aicompanion.game.tasks.SleepTask.findOwnBed(e) != null) {
+                urgency.put("sleep", p.bravery() <= 4 ? 8 : 6);
+                titles.put("sleep", "go to bed (it's night)");
+            } else if (p.bravery() <= 4 && memory.home() != null) {
+                urgency.put("shelter", 7);
+                titles.put("shelter", "get home and indoors for the night");
+            }
+        }
+
+        // Close needs that went away; add or re-weight the ones that are there.
+        for (Goals.Goal g : Goals.active(memory)) {
+            if (g.need != null && !urgency.containsKey(g.need)) {
+                Goals.finish(memory, g, "done");
+                log("need", "Taken care of: " + g.title, false);
+            }
+        }
+        for (var entry : urgency.entrySet()) {
+            Goals.Goal existing = null;
+            for (Goals.Goal g : Goals.active(memory)) if (entry.getKey().equals(g.need)) existing = g;
+            if (existing != null) {
+                existing.importance = entry.getValue();
+                existing.title = titles.get(entry.getKey());
+            } else {
+                Goals.Goal g = Goals.add(memory, titles.get(entry.getKey()), "short", entry.getValue(), null, "need", null);
+                g.need = entry.getKey();
+                log("need", "Need: " + g.title, false);
+                if (entry.getValue() >= 8 && !planRunning.get()) {
+                    nextPursuit = 0;
+                    freeTimeUntil = 0; // pressing needs don't wait for the end of a break
+                }
+            }
+        }
+        dirty = true;
+    }
+
     /** A tool broke: getting a new one becomes a short-term goal that pauses whatever it was for. */
     public void onToolBroke(net.minecraft.item.Item tool) {
         String name = dev.aicompanion.game.Ids.name(tool);

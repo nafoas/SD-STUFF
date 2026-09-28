@@ -142,6 +142,52 @@ public class CompanionMemory {
     }
 
     @org.jetbrains.annotations.Nullable public Death lastDeath;
+
+    /** A farm it made or tends: the tilled area and what grows there. */
+    public static class Farm {
+        public String name;
+        public String dimension;
+        public int minX, minZ, maxX, maxZ, y;
+        public String crop = "wheat";
+
+        public int size() {
+            return (maxX - minX + 1) * (maxZ - minZ + 1);
+        }
+    }
+
+    /** Its mine: a staircase down from the entrance, then a tunnel with side branches at the working level. */
+    public static class Mine {
+        public String name;
+        public String dimension;
+        public int entranceX, entranceY, entranceZ;
+        /** north/south/east/west */
+        public String direction;
+        /** Where the staircase has reached (the next step continues from here). */
+        public int stairX, stairY, stairZ;
+        /** The tunnel at the working level: where it continues. */
+        public int headX, headY, headZ;
+        public boolean tunnelStarted;
+        public int tunnelLength;
+        public int branches;
+        public int stepsSinceTorch;
+    }
+
+    /** A path it laid between two places (and walks along). */
+    public static class Trail {
+        public String from, to;
+        public String dimension;
+        public List<int[]> points = new ArrayList<>();
+    }
+
+    public List<Farm> farms = new ArrayList<>();
+    public List<Mine> mines = new ArrayList<>();
+    public List<Trail> trails = new ArrayList<>();
+
+    @org.jetbrains.annotations.Nullable
+    public Location home() {
+        for (Location l : places.values()) if (l.type.equals("home")) return l;
+        return null;
+    }
     /** Players (lowercase) who said the companion may take things from their chests. */
     public Set<String> chestPermissions = ConcurrentHashMap.newKeySet();
 
@@ -165,6 +211,9 @@ public class CompanionMemory {
         goals = new CopyOnWriteArrayList<>(goals == null ? List.of() : goals);
         if (plans == null) plans = "";
         if (dayPlan == null) dayPlan = new DayPlan();
+        farms = new CopyOnWriteArrayList<>(farms == null ? List.of() : farms);
+        mines = new CopyOnWriteArrayList<>(mines == null ? List.of() : mines);
+        trails = new CopyOnWriteArrayList<>(trails == null ? List.of() : trails);
         Set<String> perms = ConcurrentHashMap.newKeySet();
         if (chestPermissions != null) perms.addAll(chestPermissions);
         chestPermissions = perms;

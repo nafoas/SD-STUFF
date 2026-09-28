@@ -254,7 +254,7 @@ public class CompanionEntity extends PathAwareEntity {
         if (age % 4 == 0) pickUpNearbyItems();
         if (age % 40 == 0) equipBestArmor();
         if (age % 100 == 0) watchInventory();
-        if (age % 80 == 0 && getHealth() < getMaxHealth()) heal(1.0f);
+        tickHunger();
         if (attackCooldown > 0) attackCooldown--;
 
         if (age % 5 == 0) useShield();
@@ -357,18 +357,76 @@ public class CompanionEntity extends PathAwareEntity {
             return true;
         }
 
-        // Eat when hurt and safe.
-        if (getHealth() < getMaxHealth() - 4 && age - lastEatAge > 60) {
-            for (int i = 0; i < inventory.size(); i++) {
-                ItemStack stack = inventory.getStack(i);
-                if (stack.isFood() && stack.getItem().getFoodComponent() != null) {
-                    heal(stack.getItem().getFoodComponent().getHunger());
-                    getWorld().playSound(null, getBlockPos(), SoundEvents.ENTITY_GENERIC_EAT, SoundCategory.NEUTRAL, 1.0f, 1.0f);
-                    stack.decrement(1);
-                    lastEatAge = age;
-                    break;
-                }
+        // Eat when peckish (or hurt and not full), and not in the middle of a fight.
+        if ((food <= 14 || food < 20 && getHealth() < getMaxHealth() - 4) && age - lastEatAge > 40) eatSomething();
+        return false;
+    }
+
+    // ---------------------------------------------------------------- hunger (like a player's)
+
+    /** 0-20, like the player hunger bar. Work makes it drop; it heals only when well fed and starves slowly at 0. */
+    private int food = 20;
+    private float exhaustion;
+    private int hungerTimer;
+
+    public int getFood() {
+        return food;
+    }
+
+    public void setFood(int value) {
+        food = Math.max(0, Math.min(20, value));
+    }
+
+    public void addExhaustion(float amount) {
+        exhaustion = Math.min(40, exhaustion + amount);
+    }
+
+    private void tickHunger() {
+        if (getVelocity().horizontalLengthSquared() > 1e-4) addExhaustion(0.002f);
+        while (exhaustion >= 4) {
+            exhaustion -= 4;
+            food = Math.max(0, food - 1);
+        }
+        if (++hungerTimer < 80) return;
+        hungerTimer = 0;
+        if (food >= 18 && getHealth() < getMaxHealth()) {
+            heal(1.0f);
+            addExhaustion(3.0f);
+        } else if (food == 0 && getHealth() > 1) {
+            damage(getDamageSources().starve(), 1.0f);
+        }
+    }
+
+    /** Eats the most filling food it carries. Returns false if it has none. */
+    public boolean eatSomething() {
+        int bestSlot = -1;
+        int bestHunger = 0;
+        for (int i = 0; i < inventory.size(); i++) {
+            ItemStack stack = inventory.getStack(i);
+            var fc = stack.getItem().getFoodComponent();
+            if (!stack.isFood() || fc == null || stack.isOf(net.minecraft.item.Items.ROTTEN_FLESH) && food > 4
+                    || stack.isOf(net.minecraft.item.Items.SPIDER_EYE) || stack.isOf(net.minecraft.item.Items.POISONOUS_POTATO)) continue;
+            if (fc.getHunger() > bestHunger) {
+                bestHunger = fc.getHunger();
+                bestSlot = i;
             }
+        }
+        if (bestSlot < 0) return false;
+        ItemStack stack = inventory.getStack(bestSlot);
+        food = Math.min(20, food + bestHunger);
+        getWorld().playSound(null, getBlockPos(), SoundEvents.ENTITY_GENERIC_EAT, SoundCategory.NEUTRAL, 1.0f, 1.0f);
+        log("items", "Ate " + dev.aicompanion.game.Ids.name(stack.getItem()) + " (hunger " + food + "/20)", false);
+        stack.decrement(1);
+        lastEatAge = age;
+        return true;
+    }
+
+    /** Proper food: rotten flesh, spider eyes and poisonous potatoes don't count (it only eats those when desperate). */
+    public boolean hasFood() {
+        for (int i = 0; i < inventory.size(); i++) {
+            ItemStack st = inventory.getStack(i);
+            if (st.isFood() && !st.isOf(net.minecraft.item.Items.ROTTEN_FLESH) && !st.isOf(net.minecraft.item.Items.SPIDER_EYE)
+                    && !st.isOf(net.minecraft.item.Items.POISONOUS_POTATO)) return true;
         }
         return false;
     }
@@ -385,6 +443,7 @@ public class CompanionEntity extends PathAwareEntity {
         } else if (attackCooldown <= 0) {
             swingHand(Hand.MAIN_HAND);
             tryAttack(target);
+            addExhaustion(0.1f);
             attackCooldown = 12;
         }
     }
@@ -702,6 +761,7 @@ public class CompanionEntity extends PathAwareEntity {
                 }
             }
             world.breakBlock(pos, false, this);
+            addExhaustion(0.025f);
             dev.aicompanion.world.BlockOwnership.get(world).clear(pos);
             dev.aicompanion.world.BuildAwareness.invalidate(pos);
             if (tool.isDamageable()) {
@@ -855,6 +915,8 @@ public class CompanionEntity extends PathAwareEntity {
         nbt.putString("OwnerName", ownerName);
         nbt.putString("Skin", getSkin());
         nbt.putBoolean("Slim", isSlim());
+        nbt.putInt("Food", food);
+        nbt.putFloat("Exhaustion", exhaustion);
         DefaultedList<ItemStack> items = DefaultedList.ofSize(inventory.size(), ItemStack.EMPTY);
         for (int i = 0; i < inventory.size(); i++) items.set(i, inventory.getStack(i));
         NbtCompound inv = new NbtCompound();
@@ -870,6 +932,8 @@ public class CompanionEntity extends PathAwareEntity {
         if (nbt.containsUuid("Owner")) ownerUuid = nbt.getUuid("Owner");
         ownerName = nbt.getString("OwnerName");
         setSkin(nbt.getString("Skin"), nbt.getBoolean("Slim"));
+        food = nbt.contains("Food") ? nbt.getInt("Food") : 20;
+        exhaustion = nbt.getFloat("Exhaustion");
         DefaultedList<ItemStack> items = DefaultedList.ofSize(inventory.size(), ItemStack.EMPTY);
         Inventories.readNbt(nbt.getCompound("Bag"), items);
         for (int i = 0; i < items.size(); i++) inventory.setStack(i, items.get(i));
