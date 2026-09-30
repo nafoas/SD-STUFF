@@ -272,6 +272,49 @@ public final class CompanionManager {
     }
 
     /** Coordinates mentioned in chat become points of interest the companion can visit later. */
+    /**
+     * A player placed or broke a block. If it's part of a companion's building (or a design it's building),
+     * the companion notices: help with a build in progress, changes to a finished one, or damage to its blocks.
+     */
+    public static void onPlayerChangedBlock(net.minecraft.server.world.ServerWorld world, String player, net.minecraft.util.math.BlockPos pos,
+                                            boolean placed, @org.jetbrains.annotations.Nullable String previousOwner) {
+        String dim = world.getRegistryKey().getValue().toString();
+        for (CompanionBrain brain : brains()) {
+            var mem = brain.memory();
+            dev.aicompanion.game.build.BuildingModel hit = null;
+            boolean inProgress = false;
+            for (var d : mem.drafts.values()) if (d.buildStarted > 0 && inside(d, dim, pos)) { hit = d; inProgress = true; break; }
+            if (hit == null) for (var b : mem.buildings) if (inside(b, dim, pos)) { hit = b; break; }
+            if (hit == null) continue;
+            if (ModConfig.get().debugPaths) AiCompanionMod.LOGGER.info("[build-change] {} {} {} in {}'s {} (owner was {})", player, placed ? "placed" : "broke",
+                    pos.toShortString(), brain.name(), hit.name, previousOwner);
+            if (!placed && !dev.aicompanion.world.BlockOwnership.companionOwner(brain.id()).equals(previousOwner)) continue; // not its block
+            brain.onPlayerChangedBuilding(player, hit.name, placed, inProgress);
+        }
+    }
+
+    private static boolean inside(dev.aicompanion.game.build.BuildingModel b, String dim, net.minecraft.util.math.BlockPos p) {
+        if (b.dimension != null && !b.dimension.equals(dim)) return false;
+        for (var r : b.rooms) {
+            if (p.getX() >= r.x0 - 1 && p.getX() <= r.x1 + 1 && p.getZ() >= r.z0 - 1 && p.getZ() <= r.z1 + 1
+                    && p.getY() >= r.y - 1 && p.getY() <= r.ceilingY() + 6) return true;
+        }
+        return false;
+    }
+
+    /** A player killed a mob: if it was after a companion, that companion was helped. */
+    public static void onMobKilledByPlayer(net.minecraft.entity.mob.MobEntity mob, net.minecraft.server.network.ServerPlayerEntity player) {
+        var near = mob.getWorld().getEntitiesByClass(CompanionEntity.class, mob.getBoundingBox().expand(32), x -> x.isAlive());
+        if (ModConfig.get().debugPaths) AiCompanionMod.LOGGER.info("[rescue] {} killed by {}; target={}, companions near={}", mob.getType().getName().getString(),
+                player.getName().getString(), mob.getTarget() == null ? "none" : mob.getTarget().getName().getString(), near.size());
+        for (CompanionEntity c : near) {
+            // It was after the companion: targeting it, or hit it in the last ten seconds.
+            boolean after = mob.getTarget() == c || c.getAttacker() == mob && c.age - c.getLastAttackedTime() < 200;
+            if (!after || c.brain() == null) continue;
+            c.brain().onRescued(player.getName().getString(), mob.getType().getName().getString().toLowerCase());
+        }
+    }
+
     private static void notePointOfInterest(CompanionBrain brain, String speaker, String message) {
         java.util.regex.Matcher m3 = COORDS3.matcher(message);
         java.util.regex.Matcher m2 = COORDS2.matcher(message);
@@ -402,6 +445,7 @@ public final class CompanionManager {
                 if (tickCounter % 120 == 0) {
                     brain.checkNeeds();
                     brain.checkGoals();
+                    brain.flushBuildingChanges();
                 }
                 brain.maybePursue(now);
                 boolean playersAround = false;

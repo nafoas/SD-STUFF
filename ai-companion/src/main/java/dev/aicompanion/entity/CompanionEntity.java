@@ -232,6 +232,11 @@ public class CompanionEntity extends PathAwareEntity {
     }
 
     @Nullable
+    public Task currentTask() {
+        return task;
+    }
+
+    @Nullable
     public String currentTaskDescription() {
         return task == null ? null : task.describe();
     }

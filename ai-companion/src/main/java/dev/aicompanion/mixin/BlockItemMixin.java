@@ -21,6 +21,7 @@ public class BlockItemMixin {
                 && context.getWorld() instanceof ServerWorld world) {
             BlockOwnership.get(world).set(context.getBlockPos(), player.getGameProfile().getName());
             BuildAwareness.invalidate(context.getBlockPos());
+            dev.aicompanion.CompanionManager.onPlayerChangedBlock(world, player.getGameProfile().getName(), context.getBlockPos(), true, null);
         }
     }
 }

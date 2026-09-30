@@ -46,7 +46,8 @@ public final class BreakPolicy {
         String owner = BlockOwnership.get(world).owner(pos);
         if (self.equals(owner)) {
             // Its own block. Fine to take, except that walking somewhere is no reason to dig through its own house.
-            if (purpose == Purpose.MOVE) {
+            // (Its own throwaway blocks, like a pillar left by the door, are always fair game.)
+            if (purpose == Purpose.MOVE && !CompanionEntity.isFiller(state.getBlock().asItem())) {
                 BuildAwareness.Kind kind = BuildAwareness.classify(world, pos).kind();
                 if (kind == BuildAwareness.Kind.BUILD || kind == BuildAwareness.Kind.HOME) return "it's part of your own build";
             }

@@ -35,9 +35,17 @@ public class PathFollower {
     @Nullable private String failure;
 
     public PathFollower(Vec3d goal, double within) {
+        this(goal, within, true);
+    }
+
+    /** placeBlocks=false: walk, climb, swim and open doors only (no pillaring or bridging), e.g. for a stroll. */
+    public PathFollower(Vec3d goal, double within, boolean placeBlocks) {
         this.goal = goal;
         this.within = within;
+        this.placeBlocks = placeBlocks;
     }
+
+    private final boolean placeBlocks;
 
     public Vec3d goal() {
         return goal;
@@ -212,7 +220,7 @@ public class PathFollower {
         for (int i = 0; i < restoreAfterStep.size(); i++) restoreAfterStep.set(i, Integer.MAX_VALUE - 2); // put back at the end
         index = 0;
         stepTicks = 0;
-        int filler = c.fillerCount();
+        int filler = placeBlocks ? c.fillerCount() : 0;
         plan = PathFinder.find(c, goal, within, BreakPolicy.Purpose.MOVE, filler);
         boolean trapped = (plan.isEmpty() || !plan.reachesGoal()) && isTrapped(c);
         if (dev.aicompanion.ModConfig.get().debugPaths) dev.aicompanion.AiCompanionMod.LOGGER.info("[path] normal plan reaches={} steps={} trapped={}", plan.reachesGoal(), plan.steps().size(), trapped);

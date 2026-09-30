@@ -59,8 +59,17 @@ public class AiCompanionMod implements ModInitializer {
         // Forget who placed a block once a player breaks it.
         PlayerBlockBreakEvents.AFTER.register((world, player, pos, state, blockEntity) -> {
             if (world instanceof net.minecraft.server.world.ServerWorld sw) {
+                String previous = BlockOwnership.get(sw).ownerOfBroken(pos, state);
                 BlockOwnership.get(sw).clear(pos);
                 BuildAwareness.invalidate(pos);
+                CompanionManager.onPlayerChangedBlock(sw, player.getGameProfile().getName(), pos, false, previous);
+            }
+        });
+
+        // A player killing something that was after a companion is noticed (and remembered with gratitude).
+        net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> {
+            if (entity instanceof net.minecraft.entity.mob.MobEntity mob && source.getAttacker() instanceof net.minecraft.server.network.ServerPlayerEntity player) {
+                CompanionManager.onMobKilledByPlayer(mob, player);
             }
         });
 

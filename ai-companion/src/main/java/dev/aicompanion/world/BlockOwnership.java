@@ -76,6 +76,15 @@ public class BlockOwnership extends PersistentState {
         return names.get(idx);
     }
 
+    /** Who placed a block that has just been broken (checked against what was there, not the air left behind). */
+    @Nullable
+    public synchronized String ownerOfBroken(BlockPos pos, net.minecraft.block.BlockState was) {
+        int idx = owners.get(pos.asLong());
+        if (idx < 0) return null;
+        if (placedBlock.containsKey(pos.asLong()) && placedBlock.get(pos.asLong()) != Registries.BLOCK.getRawId(was.getBlock())) return null;
+        return names.get(idx);
+    }
+
     public boolean isPlayerPlaced(BlockPos pos) {
         String o = owner(pos);
         return o != null && !o.startsWith(COMPANION_PREFIX);

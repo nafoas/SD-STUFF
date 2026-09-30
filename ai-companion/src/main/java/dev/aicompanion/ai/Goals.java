@@ -43,6 +43,13 @@ public final class Goals {
         public long lastWorked;
         public int attempts;
         public long finished;
+        /** The last time the body said it genuinely couldn't see a way forward, and why. */
+        public String stuck = "";
+        /** What would get it unstuck, as the body sees it (items, a place, someone's help). */
+        public String stuckNeed = "";
+        public long stuckSince;
+        /** When the character asked someone for help with it (0 = hasn't). */
+        public long helpAsked;
     }
 
     public static class Condition {
@@ -304,6 +311,11 @@ public final class Goals {
                 why += ", already working on it";
             }
             if (g.attempts >= 3) score -= (g.attempts - 2) * 1.5;
+            // Asked for help with it: do other things while waiting, unless the wait's been long.
+            if (g.helpAsked > 0 && now - g.helpAsked < 20 * 60_000) {
+                score -= 6;
+                why += ", waiting for help";
+            }
             // Long-neglected goals slowly bubble back up so long-term ones still get done.
             double hoursIdle = (now - Math.max(g.lastWorked, g.created)) / 3_600_000.0;
             score += Math.min(2, hoursIdle);

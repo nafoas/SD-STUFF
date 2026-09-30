@@ -24,6 +24,8 @@ public class CompanionMemory {
         /** home, farm, mine, storage, path, other */
         public String type = "other";
         public String note = "";
+        /** When it last went there (0 = never). */
+        public long visited;
 
         public Location() {}
 
@@ -182,6 +184,62 @@ public class CompanionMemory {
     /** Buildings it knows room by room (its own, designed or scanned), and designs not built yet by building name. */
     public List<dev.aicompanion.game.build.BuildingModel> buildings = new ArrayList<>();
     public Map<String, dev.aicompanion.game.build.BuildingModel> drafts = new LinkedHashMap<>();
+    /** When it last went to see each player (lowercase name), for free-time visits. */
+    public Map<String, Long> lastVisited = new LinkedHashMap<>();
+    /** Times it asked someone for help, and whether anyone did. */
+    public List<HelpRequest> helpRequests = new ArrayList<>();
+    /** How much each player has helped it (lowercase name -> times), remembered with gratitude. */
+    public Map<String, Integer> helpedBy = new LinkedHashMap<>();
+
+    public static class HelpRequest {
+        public String goalId;
+        public String goal;
+        public String problem;
+        /** What would help, in the action layer's words (items, a place, a skill). */
+        public String need;
+        public long asked;
+        /** open, helped, gave_up */
+        public String status = "open";
+        public String helper = "";
+    }
+
+    /** Biomes it has been to. */
+    public List<String> biomesSeen = new ArrayList<>();
+
+    /** Returns true the first time it's in this biome. */
+    public boolean noteBiome(String biome) {
+        if (biomesSeen.contains(biome)) return false;
+        boolean first = biomesSeen.isEmpty(); // where it lives isn't a discovery
+        biomesSeen.add(biome);
+        return !first;
+    }
+
+    /** Remembers a generated structure (village, temple...) as a place. Returns true if it's new. */
+    public boolean noteStructure(String kind, String dimension, net.minecraft.util.math.BlockPos center) {
+        for (Location l : places.values()) {
+            if (l.type.equals("poi") && l.note.startsWith("structure:" + kind) && dimension.equals(l.dimension)
+                    && Math.abs(l.x - center.getX()) < 96 && Math.abs(l.z - center.getZ()) < 96) return false;
+        }
+        String name = kind.replace('_', ' ');
+        for (int i = 2; places.containsKey(name); i++) name = kind.replace('_', ' ') + " " + i;
+        Location loc = new Location(dimension, center.getX(), UNKNOWN_Y, center.getZ());
+        loc.type = "poi";
+        loc.note = "structure:" + kind + " found while out and about";
+        places.put(name, loc);
+        return true;
+    }
+
+    public List<HelpRequest> openHelpRequests() {
+        List<HelpRequest> out = new ArrayList<>();
+        for (HelpRequest h : helpRequests) if (h.status.equals("open")) out.add(h);
+        return out;
+    }
+
+    public void thankFor(String player, String how) {
+        helpedBy.merge(player.toLowerCase(), 1, Integer::sum);
+        adjustOpinion(player, 1);
+    }
+
     public List<Farm> farms = new ArrayList<>();
     public List<Mine> mines = new ArrayList<>();
     public List<Trail> trails = new ArrayList<>();
@@ -216,6 +274,10 @@ public class CompanionMemory {
         if (dayPlan == null) dayPlan = new DayPlan();
         farms = new CopyOnWriteArrayList<>(farms == null ? List.of() : farms);
         buildings = new CopyOnWriteArrayList<>(buildings == null ? List.of() : buildings);
+        lastVisited = new ConcurrentHashMap<>(lastVisited == null ? Map.of() : lastVisited);
+        helpRequests = new CopyOnWriteArrayList<>(helpRequests == null ? List.of() : helpRequests);
+        helpedBy = new ConcurrentHashMap<>(helpedBy == null ? Map.of() : helpedBy);
+        biomesSeen = new CopyOnWriteArrayList<>(biomesSeen == null ? List.of() : biomesSeen);
         drafts = new ConcurrentHashMap<>(drafts == null ? Map.of() : drafts);
         mines = new CopyOnWriteArrayList<>(mines == null ? List.of() : mines);
         trails = new CopyOnWriteArrayList<>(trails == null ? List.of() : trails);

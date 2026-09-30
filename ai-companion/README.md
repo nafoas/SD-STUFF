@@ -163,6 +163,30 @@ Profiles are saved in `config/ai-companion/profiles/<id>.json`, and you can edit
   - **Paths:** it lays a dirt path between its places (home, farm, mine), and trips between them follow it.
   - **Light:** it places torches on dark spots around its base and mine.
 
+## Time off, people and help
+
+- **Real time off.** When there's nothing pressing (and on free days, most of the day), a companion spends its time the way a player might. What it picks depends on its personality and on what it said about its day ("free day, going to see Steve"):
+  - stroll around its base, stopping to look around;
+  - rest at home (lazy characters, and anyone at night);
+  - go and see places it heard about in chat, other people's bases, or structures it found;
+  - check on the people it likes. Loyal characters go and see their owner, and sociable ones visit more often.
+  - explore (curious characters). New biomes, villages, temples and other structures are remembered as places and mentioned at the next check-in.
+
+  Getting there never involves pillaring or bridging; it walks, climbs, swims and opens doors. No AI calls are made while it's pottering about. When it arrives somewhere or reaches someone, the character gets a look at what's there (how they're doing, what they're holding, what they've built) and may say something. A promise, a pressing need or someone asking for something ends the break straight away, and a new day's plan replaces the last one.
+- **Asking for help, rarely.** When the body has genuinely tried and can't see a way forward, it says so. That doesn't cover "I still need to gather some" — gathering is a way forward. The character is then told what's in the way and what would help, and decides in its own words whether to ask someone, try something else or give up:
+  - at most one request every 20 minutes;
+  - never twice for the same goal within an hour;
+  - only when players are online.
+
+  While it waits it does other things.
+- **Noticing help, and harm.**
+  - **Gifts:** handing over what it asked for is recognised as help, and it gets straight back to the goal.
+  - **Rescues:** a player killing something that was after it is noticed, and the character gets to thank them.
+  - **Building:** a player building on a design it's in the middle of building counts as help.
+  - **Damage:** breaking blocks of its buildings is noticed too, and remembered.
+
+  Helpers are remembered: the character likes them more, and it all comes up at the next check-in.
+
 ## Houses that grow
 
 Companions design their own buildings room by room and extend them over time. They don't use templates, so every building turns out different.
@@ -205,6 +229,7 @@ Companions design their own buildings room by room and extend them over time. Th
 - **Craft:** full recipe chains from the game's own recipe data, for example logs → planks → sticks → pickaxe. Places a crafting table when a recipe needs one. Reports exactly what's missing.
 - **Smelt:** uses a nearby furnace, or places one, and burns fuel from the bag. Uses vanilla timing.
 - **Build:** designed buildings (above), or blueprints made of boxes and single blocks for everything else (walls, towers, bridges, decorations), with block states such as stairs facing a direction. Checks materials first. Clears grass, dirt and stone in the way but nothing else. Never places a block inside a creature.
+- **Visit, wander, explore:** go and see a player or a place, stroll around, head off to see new land.
 - **Everything else:** give items to players (thrown if it can't walk up to them), fight, store or take items from chests, follow, stay and guard, remember places.
 - **Reflexes:** eat when hurt, run from creepers, fight or flee depending on bravery, defend players they like, wear the best armor they carry, pick up items.
 

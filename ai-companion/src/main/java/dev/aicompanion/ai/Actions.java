@@ -110,6 +110,21 @@ public final class Actions {
                 List.of()));
         specs.add(new Spec("scan_building", "Take stock of one of your buildings you're standing in or next to (rooms, doors, stairs) so it can be extended with plan_build.",
                 Map.of("name", str("What to call it, e.g. home")), List.of("name")));
+        specs.add(new Spec("visit", "Go and see a player (hang around near them for a while) or a remembered place (look around there). "
+                + "For checking on someone, visiting a base, or going to see a place someone mentioned.",
+                Map.of("player", str("Player to go and see"), "place", str("Remembered place to go and see"),
+                        "minutes", num("How long to stay around (default 2)")), List.of()));
+        specs.add(new Spec("wander", "Stroll around a place (default: home, or here), stopping to look around. Free-time pottering.",
+                Map.of("place", str("Remembered place to stroll around (optional)"), "minutes", num("How long (default 3)")), List.of()));
+        specs.add(new Spec("explore", "Head off in a direction to see what's out there (remembers new biomes, villages and other structures found).",
+                Map.of("direction", enm("Which way", "north", "south", "east", "west"), "distance", num("How far out, 16-200 blocks (default 64)")),
+                List.of("direction")));
+        specs.add(new Spec("report_stuck", "Say that a goal is genuinely stuck: you tried and can't see a way forward with what you have and know. "
+                + "Not for things you just haven't done yet (gathering, crafting, walking somewhere are ways forward). "
+                + "The character may then decide to ask someone for help.",
+                Map.of("goal_id", str("The goal's id"), "problem", str("What's in the way, briefly"),
+                        "what_would_help", str("What would get it unstuck, e.g. '3 iron ingots', 'someone to show me where a village is'")),
+                List.of("goal_id", "problem")));
         specs.add(new Spec("give_items", "Walk to a player and hand them items from the inventory.",
                 Map.of("player", str("Player name"), "item", str("Item id"), "count", num("How many")), List.of("player", "item", "count")));
         specs.add(new Spec("attack", "Hunt and fight creatures nearby. Target is a mob type (zombie, cow, skeleton), 'monsters' for any hostile mob, or a player name.",
@@ -361,6 +376,48 @@ public final class Actions {
             case "build_plan" -> Designer.build(brain, c, in.has("building") && !in.get("building").isJsonNull() ? in.get("building").getAsString() : null,
                     in.has("skip_missing") && in.get("skip_missing").getAsBoolean(), done);
             case "scan_building" -> done.complete(Designer.scan(brain, c, c.getBlockPos(), string(in, "name")));
+            case "visit" -> {
+                int seconds = Math.max(20, integer(in, "minutes", 2) * 60);
+                if (in.has("player") && !in.get("player").isJsonNull() && !in.get("player").getAsString().isBlank()) {
+                    ServerPlayerEntity p = player(c, string(in, "player"));
+                    int travel = (int) (Math.sqrt(p.squaredDistanceTo(c)) / 3.5);
+                    c.startTask(dev.aicompanion.game.tasks.LeisureTask.checkOn(p, travel + seconds), done);
+                } else {
+                    String placeName = string(in, "place").toLowerCase().trim();
+                    CompanionMemory.Location l = brain.memory().places.get(placeName);
+                    if (l == null) throw new ActionError("No remembered place called '" + placeName + "'. Known: " + String.join(", ", brain.memory().places.keySet()));
+                    if (!l.dimension.equals(c.getWorld().getRegistryKey().getValue().toString())) throw new ActionError(placeName + " is in another dimension.");
+                    int travel = (int) (Math.sqrt(c.getBlockPos().getSquaredDistance(l.x, c.getY(), l.z)) / 3.5);
+                    c.startTask(dev.aicompanion.game.tasks.LeisureTask.visit(new BlockPos(l.x, l.y, l.z), placeName, travel + seconds), done);
+                }
+            }
+            case "wander" -> {
+                BlockPos around = c.getBlockPos();
+                String where = "here";
+                String placeName = in.has("place") && !in.get("place").isJsonNull() ? in.get("place").getAsString().toLowerCase().trim() : "";
+                CompanionMemory.Location l = placeName.isEmpty() ? brain.memory().home() : brain.memory().places.get(placeName);
+                if (l != null && l.dimension.equals(c.getWorld().getRegistryKey().getValue().toString()) && l.y != CompanionMemory.UNKNOWN_Y) {
+                    around = new BlockPos(l.x, l.y, l.z);
+                    where = placeName.isEmpty() ? "home" : placeName;
+                }
+                c.startTask(dev.aicompanion.game.tasks.LeisureTask.wander(around, where, Math.max(20, integer(in, "minutes", 3) * 60)), done);
+            }
+            case "explore" -> {
+                Direction dir = Direction.byName(string(in, "direction").toLowerCase());
+                if (dir == null || dir.getAxis().isVertical()) throw new ActionError("Direction must be north, south, east or west.");
+                int distance = Math.max(16, Math.min(200, integer(in, "distance", 64)));
+                c.startTask(dev.aicompanion.game.tasks.LeisureTask.explore(dir, distance, distance / 3 + 120), done);
+            }
+            case "report_stuck" -> {
+                Goals.Goal g = Goals.find(brain.memory(), string(in, "goal_id"));
+                if (g == null) throw new ActionError("No goal with id " + string(in, "goal_id"));
+                g.stuck = string(in, "problem");
+                g.stuckNeed = in.has("what_would_help") && !in.get("what_would_help").isJsonNull() ? in.get("what_would_help").getAsString() : "";
+                g.stuckSince = System.currentTimeMillis();
+                g.attempts++;
+                brain.log("need", "Stuck on " + g.title + ": " + g.stuck, false);
+                done.complete("Noted. " + brain.name() + " will decide whether to ask anyone for help.");
+            }
             case "give_items" -> {
                 ServerPlayerEntity p = player(c, string(in, "player"));
                 Item item = item(in, "item");

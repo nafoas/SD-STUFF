@@ -164,7 +164,8 @@ public class CompanionBrain {
         dirty = true;
         memory.addEvent(player + " gave you " + what);
         log("gift", player + " gave you " + what, false);
-        if (allow("gift:" + player, 15000)) stimulate(new Stimulus("gift", player + " gave you " + what + ".", player, 0));
+        String help = helpFromGift(player, what);
+        if (allow("gift:" + player, 15000) || !help.isEmpty()) stimulate(new Stimulus("gift", player + " gave you " + what + "." + help, player, 0));
     }
 
     public void onDeath(String deathMessage, String dimension, net.minecraft.util.math.BlockPos pos, List<String> lost) {
@@ -216,6 +217,11 @@ public class CompanionBrain {
     }
 
     public void onPlayerApproach(String player) {
+        // It walked up to them itself (a visit): that's its greeting, not them coming over.
+        Long visited = memory.lastVisited.get(player.toLowerCase());
+        if (visited != null && System.currentTimeMillis() - visited < 2 * 60_000) return;
+        CompanionEntity e = entity();
+        if (e != null && e.currentTask() instanceof dev.aicompanion.game.tasks.LeisureTask lt && lt.mode() == dev.aicompanion.game.tasks.LeisureTask.Mode.CHECK_ON) return;
         if (allow("greet:" + player, 10 * 60 * 1000)) stimulate(new Stimulus("greet", player + " just came over to you.", player, 0));
     }
 
@@ -257,21 +263,194 @@ public class CompanionBrain {
      */
     public void maybePursue(long now) {
         CompanionEntity e = entity();
-        if (e == null || !ModConfig.get().autonomy || isThinkingOrActing() || e.isInCombat() || e.currentTaskDescription() != null) return;
+        if (e == null || !ModConfig.get().autonomy || isThinkingOrActing() || e.isInCombat()) return;
+        boolean onBreak = e.currentTask() instanceof dev.aicompanion.game.tasks.LeisureTask;
+        if (e.currentTaskDescription() != null && !onBreak) return;
         if (now < nextPursuit) return;
+        maybeAskForHelp(now);
         checkGoals(); // don't start another step on something that's already achieved
         Goals.Choice choice = Goals.choose(memory, profile, lastGoalId);
         // Free time is real time off, but a promise or something blocking one cuts it short.
         boolean pressing = choice.goal() != null && (!choice.goal().from.equals("self") || choice.goal().blocker && choice.score() >= 15
                 || choice.goal().condition != null && "recover".equals(choice.goal().condition.type)); // things vanish if it waits
-        if (now < freeTimeUntil && !pressing) return;
-        if (choice.isFreeTime()) {
-            long minutes = memory.dayPlan.kind.equals("free") ? 10 : 3 + (long) (Math.random() * 3);
-            freeTimeUntil = now + minutes * 60_000;
-            log("free", "Taking some time off (" + choice.why() + ")", false);
+        if (now < freeTimeUntil && !pressing) {
+            if (!onBreak) startLeisure(e); // one outing ended; the break goes on
             return;
         }
+        if (onBreak && !pressing && now < freeTimeUntil + 60_000) return; // let the current outing wind down
+        if (choice.isFreeTime()) {
+            // Free days are mostly free: long stretches of time off. Otherwise a short break.
+            long minutes = memory.dayPlan.kind.equals("free") ? 20 + (long) (Math.random() * 20) : 4 + (long) (Math.random() * 4);
+            freeTimeUntil = now + minutes * 60_000;
+            log("free", "Taking some time off (" + choice.why() + ")", false);
+            if (!onBreak) startLeisure(e);
+            return;
+        }
+        if (onBreak) e.cancelTask("back to work");
+        freeTimeUntil = 0;
         startPursuit(choice.goal(), choice.why());
+    }
+
+    /** Starts the next thing to do on a break: a stroll, a visit, checking on someone, exploring, resting. */
+    private void startLeisure(CompanionEntity e) {
+        if (!allow("leisure", 10_000)) return;
+        Leisure.Pick pick = Leisure.choose(this, e);
+        if (pick == null) return;
+        debug("free time: " + pick.why());
+        java.util.concurrent.CompletableFuture<String> done = new java.util.concurrent.CompletableFuture<>();
+        dev.aicompanion.game.tasks.LeisureTask task = pick.task();
+        done.thenAccept(result -> {
+            if (!result.startsWith("Failed")) return;
+            // Couldn't get there: don't keep trying straight away.
+            long now = System.currentTimeMillis();
+            if (task.mode() == dev.aicompanion.game.tasks.LeisureTask.Mode.CHECK_ON) memory.lastVisited.put(task.label().toLowerCase(), now - 5 * 60_000);
+            if (task.mode() == dev.aicompanion.game.tasks.LeisureTask.Mode.VISIT) {
+                CompanionMemory.Location l = memory.places.get(task.label());
+                if (l != null) l.visited = now - 23 * 60 * 60_000L;
+            }
+        });
+        e.startTask(task, done);
+    }
+
+    /** Arrived somewhere on a free-time outing (a player it came to see, or a place). The character may say something. */
+    public void onLeisureArrived(String what, @Nullable ServerPlayerEntity player, net.minecraft.util.math.BlockPos pos) {
+        CompanionEntity e = entity();
+        if (e == null) return;
+        long now = System.currentTimeMillis();
+        StringBuilder sb = new StringBuilder();
+        if (player != null) {
+            String who = player.getName().getString();
+            memory.lastVisited.put(who.toLowerCase(), now);
+            sb.append("On your free time you went over to see how ").append(who).append(" is doing. ");
+            sb.append(who).append(" has ").append(Math.round(player.getHealth())).append("/20 health and ").append(player.getHungerManager().getFoodLevel()).append("/20 food");
+            if (!player.getMainHandStack().isEmpty()) sb.append(", and is holding ").append(dev.aicompanion.game.Ids.name(player.getMainHandStack().getItem()));
+            sb.append(". ");
+            String build = dev.aicompanion.world.BuildAwareness.describe(e.serverWorld(), player.getBlockPos());
+            if (!build.startsWith("There's no build")) sb.append("Around them: ").append(build).append(" ");
+            if (!e.getWorld().isDay() && e.getWorld().isSkyVisible(player.getBlockPos())) sb.append("It's night and they're out in the open. ");
+            log("free", "Went to see " + who, false);
+        } else {
+            for (var loc : memory.places.entrySet()) {
+                if (Math.abs(loc.getValue().x - pos.getX()) < 12 && Math.abs(loc.getValue().z - pos.getZ()) < 12) loc.getValue().visited = now;
+            }
+            sb.append("On your free time you went to ").append(what).append(". ");
+            String build = dev.aicompanion.world.BuildAwareness.describe(e.serverWorld(), pos);
+            sb.append(build.startsWith("There's no build") ? "It's open country, nothing built here." : "You see: " + build);
+            log("free", "Went to see " + what, false);
+        }
+        dirty = true;
+        // Only worth saying something if someone's around to hear it, and not too often.
+        boolean audience = player != null || !e.getWorld().getEntitiesByClass(ServerPlayerEntity.class, e.getBoundingBox().expand(24), pl -> true).isEmpty();
+        if (audience && allow("visit", player != null ? 5 * 60_000 : 8 * 60_000)) stimulate(new Stimulus("visit", sb.toString().trim(), player == null ? null : player.getName().getString(), 0));
+        else memory.addEvent(sb.toString().trim());
+    }
+
+    // ------------------------------------------------------------------ asking for help, and noticing help
+
+    /**
+     * A goal the body has genuinely got stuck on, twice or more, with no obvious way forward: the character is told,
+     * and decides whether to ask someone (in its own words) or try something else. Rare by design: at most one
+     * question every 20 minutes, never twice for the same goal within an hour, and only with players around.
+     */
+    private void maybeAskForHelp(long now) {
+        CompanionEntity e = entity();
+        if (e == null || e.getServer() == null || e.getServer().getPlayerManager().getCurrentPlayerCount() == 0) return;
+        for (Goals.Goal g : Goals.active(memory)) {
+            if (g.stuck.isBlank() || g.attempts < 2 || now - g.stuckSince > 30 * 60_000) continue;
+            if (g.helpAsked > 0 && now - g.helpAsked < 60 * 60_000) continue;
+            if (!allow("askhelp", 20 * 60_000)) return;
+            g.helpAsked = now; // asked once, whatever the character decides
+            dirty = true;
+            String event = "You've been trying to \"" + Goals.chain(memory, g) + "\" and you're stuck: " + g.stuck + ".";
+            stimulate(new Stimulus("stuck", event, g.id, 0));
+            return;
+        }
+    }
+
+    /** Someone gave it things: if that's what it asked for (or finished a goal), that's help, and it's noticed. */
+    private String helpFromGift(String player, String what) {
+        String lower = what.toLowerCase().replace(' ', '_');
+        for (CompanionMemory.HelpRequest h : memory.openHelpRequests()) {
+            String need = h.need.toLowerCase().replace(' ', '_');
+            boolean matches = false;
+            for (String word : lower.split("[^a-z_]+")) if (word.length() > 2 && need.contains(word.replaceAll("^_+|_+$", ""))) matches = true;
+            if (!matches) continue;
+            h.status = "helped";
+            h.helper = player;
+            Goals.Goal g = Goals.find(memory, h.goalId);
+            if (g != null) {
+                // Help arrived: back to it straight away.
+                g.helpAsked = 0;
+                g.stuck = "";
+                g.attempts = 0;
+                nextPursuit = 0;
+            }
+            memory.thankFor(player, "gave " + what);
+            log("help", player + " helped: gave you " + what + ", which you'd asked for (" + h.goal + ")", true);
+            return " That's what you asked for help with (" + h.goal + ").";
+        }
+        return "";
+    }
+
+    /** A player built part of something it's building (or added to its building). Tallied, then noted once. */
+    private final Map<String, int[]> builtByPlayer = new ConcurrentHashMap<>();
+    private final Map<String, int[]> brokenByPlayer = new ConcurrentHashMap<>();
+
+    public void onPlayerChangedBuilding(String player, String building, boolean placed, boolean inProgress) {
+        if (building.toLowerCase().startsWith(name.toLowerCase() + "'s ")) building = building.substring(name.length() + 3); // "your cottage", not "your Ada's cottage"
+        String key = player + "|" + building + "|" + inProgress;
+        (placed ? builtByPlayer : brokenByPlayer).computeIfAbsent(key, k -> new int[2])[0]++;
+        (placed ? builtByPlayer : brokenByPlayer).get(key)[1] = (int) (System.currentTimeMillis() / 1000);
+    }
+
+    /** Called every few seconds: reports player building help/damage once they've stopped for a bit. */
+    public void flushBuildingChanges() {
+        int nowS = (int) (System.currentTimeMillis() / 1000);
+        for (var it = builtByPlayer.entrySet().iterator(); it.hasNext(); ) {
+            var en = it.next();
+            if (nowS - en.getValue()[1] < 30) continue;
+            it.remove();
+            String[] k = en.getKey().split("\\|");
+            int n = en.getValue()[0];
+            boolean inProgress = Boolean.parseBoolean(k[2]);
+            if (inProgress) {
+                memory.thankFor(k[0], "helped build");
+                log("help", k[0] + " helped build your " + k[1] + " (" + n + " block" + (n == 1 ? "" : "s") + ")", n >= 8);
+            } else {
+                log("note", k[0] + " added " + n + " block" + (n == 1 ? "" : "s") + " to your " + k[1], false);
+            }
+            dirty = true;
+        }
+        for (var it = brokenByPlayer.entrySet().iterator(); it.hasNext(); ) {
+            var en = it.next();
+            if (nowS - en.getValue()[1] < 30) continue;
+            it.remove();
+            String[] k = en.getKey().split("\\|");
+            int n = en.getValue()[0];
+            if (n >= 3) memory.adjustOpinion(k[0], -1);
+            log("damage", k[0] + " broke " + n + " block" + (n == 1 ? "" : "s") + " of your " + k[1], n >= 5);
+            dirty = true;
+        }
+    }
+
+    /** A player killed something that was attacking it. */
+    public void onRescued(String player, String mob) {
+        CompanionEntity e = entity();
+        if (!allow("rescued:" + player, 60_000)) return;
+        memory.thankFor(player, "saved you from a " + mob);
+        boolean close = e != null && e.getHealth() < 10;
+        log("help", player + " killed the " + mob + " that was after you" + (close ? " (you were in trouble)" : ""), close);
+        if (allow("rescuedtalk:" + player, 5 * 60_000)) {
+            stimulate(new Stimulus("helped", player + " just killed the " + mob + " that was attacking you" + (close ? ", and you were badly hurt." : "."), player, 0));
+        }
+        dirty = true;
+    }
+
+    /** Came across something new while out and about (a new biome, a village, a temple...). */
+    public void onDiscovery(String what, net.minecraft.util.math.BlockPos pos, boolean big) {
+        log("discovery", "Found " + what + " at " + pos.getX() + ", " + pos.getZ(), big);
+        memory.addEvent("You found " + what + " at " + pos.getX() + ", " + pos.getZ() + ".");
+        dirty = true;
     }
 
     private void startPursuit(Goals.Goal goal, String why) {
@@ -288,7 +467,7 @@ public class CompanionBrain {
                 debug("working on [" + goal.id + "] " + goal.title + " (" + why + ")");
                 ClaudeActionLayer.Outcome outcome = ClaudeActionLayer.pursue(this, goal, why, situation, () -> planGeneration.get() != generation);
                 goal.lastWorked = System.currentTimeMillis();
-                boolean stuck = outcome.actions() == 0 || outcome.summary().toLowerCase().matches(".*(fail|couldn't|could not|can't|missing|not enough).*");
+                boolean stuck = outcome.achievedNothing() || outcome.summary().toLowerCase().matches(".*(fail|couldn't|could not|can't|missing|not enough).*");
                 if (stuck) goal.attempts++;
                 else goal.attempts = 0;
                 log("work", "[" + goal.title + "] " + outcome.summary(), false);
@@ -316,6 +495,18 @@ public class CompanionBrain {
             log("goal", "Achieved goal: " + g.title + (gift ? " (thanks to a gift)" : ""), !g.horizon.equals("short") || !g.from.equals("self"));
             for (CompanionMemory.Promise p : memory.promises) {
                 if (g.id.equals(p.goalId) && p.status.equals("open")) p.status = "done";
+            }
+            for (CompanionMemory.HelpRequest h : memory.openHelpRequests()) {
+                if (!g.id.equals(h.goalId)) continue;
+                h.status = gift ? "helped" : "gave_up";
+                if (gift) {
+                    String giver = memory.journalSince(System.currentTimeMillis() - 60_000).stream().filter(j -> j.kind.equals("gift"))
+                            .map(j -> j.text.split(" gave you ")[0]).reduce((a, b) -> b).orElse("");
+                    if (!giver.isEmpty()) {
+                        h.helper = giver;
+                        memory.thankFor(giver, "helped with " + g.title);
+                    }
+                }
             }
             if (g.parent != null) lastGoalId = g.parent; // back to what it was doing
             if (!planRunning.get()) nextPursuit = Math.min(nextPursuit, System.currentTimeMillis() + 3_000);
@@ -538,7 +729,8 @@ public class CompanionBrain {
                         .append("a free day (wandering, visiting people, looking around, relaxing) or a mixed day. Decide the way you really would: ")
                         .append("your mood, how hard you've been working, what's going on.\n");
                 format = "Say something in chat if you feel like it (or nothing). Then write \"DAY:\" followed by work, goals, free or mixed, "
-                        + "and optionally a few words on what you have in mind. Then \"INTENT:\" with what you do first. "
+                        + "and optionally a few words on what you have in mind (for a free day: who you'd like to see, where you'd like to go, "
+                        + "or just taking it easy). Then \"INTENT:\" with what you do first. "
                         + "If your goals changed, add \"PLANS:\" in your own words.";
             }
             case "checkin" -> {
@@ -552,6 +744,19 @@ public class CompanionBrain {
                 prompt.append("\nPeople are talking in chat, not necessarily to you. ").append(s.event()).append("\n");
                 format = "Only chime in if you genuinely would, in character (1 to 2 short sentences). Staying quiet is fine: then write nothing. "
                         + "Add \"INTENT:\" only if you actually want to do something about it.";
+            }
+            case "visit" -> {
+                prompt.append("\n").append(s.event()).append("\n");
+                format = "This is your own time. If you feel like it, say something (1 to 2 short sentences): a greeting, a question, a remark on what you see, "
+                        + "or nothing at all. Add \"INTENT:\" only if you actually want to do something about it (help them with something, go home, stay a while...).";
+            }
+            case "stuck" -> {
+                Goals.Goal g = Goals.find(memory, s.speaker());
+                prompt.append("\n").append(s.event()).append("\n");
+                if (g != null && !g.stuckNeed.isBlank()) prompt.append("What would help, as far as you can tell: ").append(g.stuckNeed).append("\n");
+                format = "Decide what to do about it, in character. You can ask someone in chat for help (say who and exactly what you need), try something "
+                        + "different, or give up on it. Only ask if you really can't manage alone. Write what you say in chat (or nothing), "
+                        + "then \"INTENT:\" with what you'll do.";
             }
             case "chatter" -> {
                 prompt.append("\nNothing in particular needs you right now").append(doing == null ? "" : " (you're " + doing + ")")
@@ -586,6 +791,7 @@ public class CompanionBrain {
             case "checkin" -> "[Taking stock]";
             case "morning" -> "[A new day]";
             case "chatter" -> "[A quiet moment]";
+            case "stuck" -> "[Stuck: " + s.event() + "]";
             case "overheard" -> "[Overheard chat]";
             default -> "[" + s.event() + "]";
         };
@@ -599,6 +805,15 @@ public class CompanionBrain {
             String d = parsed.day().toLowerCase();
             memory.dayPlan.kind = d.startsWith("work") ? "work" : d.startsWith("goal") ? "goals" : d.startsWith("free") || d.startsWith("rest") || d.startsWith("off") ? "free" : "mixed";
             memory.dayPlan.note = parsed.day().replaceFirst("(?i)^(work|goals?|free|mixed|rest|off)( day)?\\W*", "").trim();
+            // A new day plan replaces yesterday's: a long break from a free day doesn't carry over into a work day.
+            if (!memory.dayPlan.kind.equals("free")) {
+                freeTimeUntil = 0;
+                nextPursuit = 0;
+                CompanionEntity body = entity();
+                if (body != null && body.getServer() != null) body.getServer().execute(() -> {
+                    if (body.currentTask() instanceof dev.aicompanion.game.tasks.LeisureTask) body.cancelTask("a new day's plans");
+                });
+            }
             log("decision", "Today: " + memory.dayPlan.describe(), false);
         }
         if (parsed.plans() != null && !parsed.plans().isBlank()) {
@@ -611,6 +826,7 @@ public class CompanionBrain {
             }
         }
         if (!parsed.spoken().isBlank()) say(parsed.spoken(), s.depth());
+        if (s.kind().equals("stuck")) afterStuck(s, parsed);
 
         String intent = parsed.intent();
         if (intent != null && NO_ACTION.matcher(intent).matches()) return;
@@ -629,6 +845,30 @@ public class CompanionBrain {
             lastGoalId = g.id;
         }
         startPlan(s, parsed.spoken(), intent, situation, promise);
+    }
+
+    private static final Pattern GIVE_UP = Pattern.compile("(?i).*\\b(give up|giving up|drop (it|that)|forget (about )?it|abandon|not worth it)\\b.*");
+
+    /** The character said something about being stuck: asking for help is recorded; giving up drops the goal. */
+    private void afterStuck(Stimulus s, Reply parsed) {
+        Goals.Goal g = Goals.find(memory, s.speaker());
+        if (g == null) return;
+        if (!parsed.spoken().isBlank()) {
+            CompanionMemory.HelpRequest h = new CompanionMemory.HelpRequest();
+            h.goalId = g.id;
+            h.goal = g.title;
+            h.problem = g.stuck;
+            h.need = g.stuckNeed.isBlank() ? g.stuck : g.stuckNeed;
+            h.asked = System.currentTimeMillis();
+            memory.helpRequests.add(h);
+            while (memory.helpRequests.size() > 20) memory.helpRequests.remove(0);
+            log("help", "Asked for help with " + g.title + ": " + parsed.spoken(), false);
+        }
+        if (parsed.intent() != null && GIVE_UP.matcher(parsed.intent()).matches()) {
+            Goals.finish(memory, g, "dropped");
+            log("goal", "Gave up on: " + g.title, false);
+        }
+        dirty = true;
     }
 
     /** What the character wrote: spoken words, private intent, and optionally updated plans. */

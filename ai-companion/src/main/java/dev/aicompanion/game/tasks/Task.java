@@ -40,6 +40,11 @@ public abstract class Task {
         c.stopBreaking();
     }
 
+    /** Whether getting about may pillar up and bridge gaps with throwaway blocks (not for a stroll). */
+    protected boolean placesBlocksToGetAbout() {
+        return true;
+    }
+
     /** Major tasks (gathering, building, digging...) prompt a character check-in when they end. */
     public boolean isMajor() {
         return !isContinuous();
@@ -99,7 +104,7 @@ public abstract class Task {
         } else if (++ticksSinceProgress > 60) {
             // The easy way isn't working: take the hard way.
             c.getNavigation().stop();
-            follower = new PathFollower(target, within);
+            follower = new PathFollower(target, within, placesBlocksToGetAbout());
             return Move.MOVING;
         }
         if (--repathCooldown <= 0 || c.getNavigation().isIdle()) {
@@ -112,7 +117,7 @@ public abstract class Task {
             }
             if (path == null || !path.reachesTarget()) {
                 c.getNavigation().stop();
-                follower = new PathFollower(target, within);
+                follower = new PathFollower(target, within, placesBlocksToGetAbout());
             } else {
                 c.getNavigation().startMovingAlong(path, c.workSpeed());
             }

@@ -144,6 +144,7 @@ public final class ClaudeActionLayer {
                 - Night: sleep in your bed at home; cautious characters get indoors. No bed yet: make one (3 wool + 3 planks) for home.
                 - Paths: once you have a home and a farm or mine, lay_path between them; trips between them then follow it.
                 - Needs show up as goals marked "need"; urgent ones come first, and they close by themselves once handled.
+                - Time off: visit (a player or a place), wander and explore are how %1$s spends free time or goes to see people and places.
 
                 Building well:
                 - Houses, homes, rooms, extensions (more storage, a second floor, a balcony, a workshop) and anything else with rooms: use plan_build with \
@@ -167,7 +168,16 @@ public final class ClaudeActionLayer {
      * Returns a short summary of what happened.
      */
     /** What happened when a decision was carried out. */
-    public record Outcome(String summary, int actions) {}
+    public record Outcome(String summary, int actions, int failures) {
+        public Outcome(String summary, int actions) {
+            this(summary, actions, 0);
+        }
+
+        /** Nothing got done: no actions, or every one of them failed. */
+        public boolean achievedNothing() {
+            return actions == 0 || failures >= actions;
+        }
+    }
 
     public static Outcome carryOut(CompanionBrain brain, String event, String spoken, String intent, String situation, BooleanSupplier cancelled) {
         String userText = context(brain, situation)
@@ -192,7 +202,8 @@ public final class ClaudeActionLayer {
                 + "Use what you remember (places, chests, resources) before searching from scratch. "
                 + "If something you can't do right now is in the way (a missing tool, materials, a place), add a blocking sub-goal with add_goal and work on that instead. "
                 + "Record progress with goal_note, and use goal_done when the selected goal is achieved. "
-                + "If this goal no longer makes sense, say so in your summary instead of forcing it.";
+                + "If this goal no longer makes sense, say so in your summary instead of forcing it. "
+                + "If you've tried and genuinely can't see any way forward with what you have and know (not just 'need to gather more'), use report_stuck.";
         return run(brain, userText, cancelled);
     }
 
@@ -210,6 +221,7 @@ public final class ClaudeActionLayer {
         String system = systemPrompt(brain.name(), brain.profile());
         int maxActions = Math.max(1, ModConfig.get().maxActionsPerDecision);
         int actions = 0;
+        int failures = 0;
         String lastText = "";
 
         try {
@@ -262,6 +274,7 @@ public final class ClaudeActionLayer {
                             error = true;
                         }
                     }
+                    if (error || output.startsWith("Failed") || output.startsWith("Stopped") || output.startsWith("Took too long")) failures++;
                     brain.debug("<- " + output);
                     results.add(ContentBlockParam.ofToolResult(ToolResultBlockParam.builder()
                             .toolUseId(use.id()).content(output).isError(error).build()));
@@ -277,8 +290,8 @@ public final class ClaudeActionLayer {
             brain.reportProblem("Claude API error: " + e.getMessage());
             return new Outcome("Couldn't act because of an error.", 0);
         }
-        if (cancelled.getAsBoolean()) return new Outcome("Stopped partway because the character changed their mind.", actions);
-        return new Outcome(lastText.isBlank() ? "Done." : lastText, actions);
+        if (cancelled.getAsBoolean()) return new Outcome("Stopped partway because the character changed their mind.", actions, failures);
+        return new Outcome(lastText.isBlank() ? "Done." : lastText, actions, failures);
     }
 
     /** A one-off structured answer (no tools), e.g. goal edits. */
